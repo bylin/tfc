@@ -1,0 +1,57 @@
+## batch-effects
+_Last modified `r format(Sys.time(), "%I:%M %p on %b %d, %Y")`. This document, R session image, knitr cache, figures, and other associated datasets are located in `cruncher:/inside/grotto/blin/trna-markers/batch-effects/`._
+
+```{r setup, echo=FALSE, warning=FALSE, results=FALSE, message=FALSE, errors=FALSE, cache=FALSE}
+library(knitr)
+opts_chunk$set(cache=TRUE, cache.path="/inside/grotto/blin/trna-markers/batch-effects/cache/", eval=TRUE, echo=TRUE, warning=FALSE, results=FALSE, message=FALSE, autodep=TRUE, dev="png", dpi=300)
+```
+
+```{r libraries, cache=FALSE}
+library(sva)
+library(GenomicRanges)
+attach('/inside/grotto/blin/trna-markers/feature-counts/feature-counts.RData')
+```
+
+TCGA data almost certainly contains batch effects that need to be removed. I normalize the data and use the [`sva`](http://www.bioconductor.org/packages/release/bioc/html/sva.html) package to remove them.
+
+### Normalize counts
+Let's load the `.RData` file and normalize the counts using `DESeq2`. For this first step, we will also eliminate features that have 0 counts for over 95% of the samples. This means that for a tRF to be considered in the analysis, at least 5% of the samples needs to exhibit expression. This corresponds to 10% of the tumor samples or 10% of the normal samples (or anything in between). A secondary filter for a minimum count is also applied. Here, the minimum is a normalized read count of 10.
+
+```{r get-scaling-factors}
+feature_counts <- feature_counts[apply(feature_counts, 1, function(row) length(which(row > 0)) > 5), ]
+feature_counts <- feature_counts[apply(feature_counts, 1, function(row) sum(row) > 10), ]
+num_pairs <- length(colnames(feature_counts))/2
+colData <- data.frame(row.names = colnames(feature_counts), condition = c(rep("tp", num_pairs), rep("nt", num_pairs)), type = "single-read")
+dds <- DESeqDataSetFromMatrix(countData = feature_counts, colData = colData, design = ~ condition)
+dds <- DESeq(dds)
+```
+
+We don't need to run the entire DESeq analysis pipeline. The only thing of interest is the scaling factors which we can now apply to our hg19 feature counts.
+
+```{r normalize}
+normalized_counts <- t(t(feature_counts) / sizeFactors(dds)) # R applies vectors on columns (genes), we want R to apply them on rows (samples) for size factors
+```
+
+## Surrogate variable analysis
+```{r estimate-surrogate-variables}
+pheno_data <- data.frame(row.names = prad_metadata$barcode, sample_type = prad_metadata$sample_type)
+svobj <- sva(dat = normalized_counts,
+             mod = model.matrix(~ as.factor(sample_type), data = pheno_data),
+             mod0 = model.matrix(~ 1, data = pheno_data))
+```
+
+
+## PCA
+To look at the effectiveness of ComBat, I will project pre- and post-ComBat expression data onto its principle components.
+
+```{r pca-function}
+
+```
+
+```{r pca}
+
+```
+
+```{r save-image}
+save.image("batch-effects-image.RData")
+```

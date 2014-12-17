@@ -16,37 +16,6 @@ register(MulticoreParam(8)) # turn this off depending on your machine!
 load('/inside/grotto/blin/trna-markers/feature-counts/feature-counts.RData')
 ```
 
-From [feature-counts](../feature-counts/feature-counts.html), we have four count matrices: `hg19_feature_nt_counts`, `hg19_feature_tp_counts`, `trna_nt_counts`, and `trna_tp_counts`. We are interested in correlations for the hg19 feature counts, since that's where the tRF counts are. 
-
-### Normalize counts
-Let's load the `.RData` file and normalize the counts using `DESeq2`. For this first step, we will also eliminate features that have 0 counts for over 95% of the samples. This means that for a tRF to be considered in the analysis, at least 5% of the samples needs to exhibit expression. This corresponds to 10% of the tumor samples or 10% of the normal samples (or anything in between). A secondary filter for a minimum count is also applied. Here, the minimum is a normalized read count of 10.
-
-```{r get-scaling-factors}
-hg19_feature_counts <- cbind(hg19_feature_tp_counts, hg19_feature_nt_counts) 
-hg19_feature_counts <- hg19_feature_counts[apply(hg19_feature_counts, 1, function(row) length(which(row > 0)) > 5), ]
-hg19_feature_counts <- hg19_feature_counts[apply(hg19_feature_counts, 1, function(row) sum(row) > 10), ]
-num_pairs <- length(colnames(hg19_feature_counts))/2
-colData <- data.frame(row.names = colnames(hg19_feature_counts), condition = c(rep("tp", num_pairs), rep("nt", num_pairs)), type = "single-read")
-dds <- DESeqDataSetFromMatrix(countData = hg19_feature_counts, colData = colData, design = ~ condition)
-dds <- DESeq(dds)
-res <- results(dds)
-```
-
-We don't need to run the entire DESeq analysis pipeline. The only thing of interest is the scaling factors which we can now apply to our hg19 feature counts.
-
-```{r normalize}
-normalized_counts <- t(t(hg19_feature_counts) / sizeFactors(dds)) # R applies vectors on columns (genes), we want R to apply them on rows (samples) for size factors
-
-```
-
-We should confirm that the normalization did a good job by making an MA plot.
-
-```{r ma-plot}
-plotMA(res, main = "DESeq2", ylim = c(-2, 2))
-```
-
-### Correlation
-
 The correlation will be performed on a matrix of fold changes. I'm not sure whether I should take the log<sub>2</sub> fold change before then. I do in this case, to minimize heteroscedasticity - reduce the variability between sub-populations, which in this case is individual genes or groups of genes. Since these are `log2` values, and there are fragments with counts of 0, we will use Laplacian smoothing (add a pseudocount of 1) to avoid `-Inf` values.
 
 ```{r fold-change}

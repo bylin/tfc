@@ -48,6 +48,7 @@ parseMetadata <- function(metadata) {
 prad_metadata <- read.table('/inside/grotto/blin/trna-markers/process-reads/prad-summary.tab', header=TRUE, sep='\t', as.is=TRUE)
 prad_metadata <- parseMetadata(prad_metadata)
 numbering <- match(prad_metadata$participant_id, unique(prad_metadata$participant_id)) # assign each patient new ID, internal to this analysis
+prad_metadata$shortids <- numbering
 numbering <- formatC(numbering, flag = "0", digits = 3) # convert to 4 digit number (may need to accomodate many more patients/samples in the future
 prad_metadata$shortnames <- paste0('prad-', numbering, "-", prad_metadata$sample_type, ".bam")
 write(prad_metadata$analysis_id, file="prad-samples.txt")
@@ -84,14 +85,14 @@ Originally, the plan was to remap the reads to hg19 and to the extended feature 
 ```{r remap, engine="bash"}
 cd /inside/grotto/blin/trna-markers/mirna/prad
 for prefix in `ls *-TP.bam *-NT.bam | cut -f 1 -d .`; do
-  if [ ! -e $prefix.fastq ]
-  then
-    bam2fastq --force -o $prefix# $prefix.bam
-    mv ${prefix}_M $prefix.fastq
-    rm ${prefix}_1 ${prefix}_2
-  fi
   if [ ! -e $prefix-mapped.bam ]
   then
+    if [ ! -e $prefix.fastq ]
+    then
+      bam2fastq --force -o $prefix# $prefix.bam
+      mv ${prefix}_M $prefix.fastq
+      rm ${prefix}_1 ${prefix}_2
+    fi
     bowtie2 -x ~/grotto/data/hg19 -k 100 -U ${prefix}.fastq -S $prefix-mapped-1.sam
     samtools view -S -F 4 -h -u $prefix-mapped-1.sam | samtools view -F 512 -h  - > $prefix-mapped-2.sam
     bowtie2-best-mapped.py $prefix-mapped-2.sam | samtools view -S -u - | samtools sort - $prefix-mapped # auto appends .bam
@@ -106,5 +107,6 @@ cd /inside/grotto/blin/trna-markers/process-reads/
 This code is adapted from external scripts. We iterate through all downloaded BAM files, convert them to fastq using `bam2fastq`, map them to hg19 and mature tRNAs with `bowtie2` with a maximum of 100 mappings, and filter out unmapped and low quality reads using `samtools`**. `bowtie2-best-mapped.py`, adapted from Andrew's script, finds the best scoring multimappings from `bowtie2` output and discards multimappings with lower scores.
 
 ```{r save-image}
+save(prad_metadata, file = 'prad-metadata.RData')
 save.image("process-reads-image.RData")
 ```
