@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+
+<title>Count tRNA features in matched tumor-normal PRAD reads</title>
+
+<script type="text/javascript">
+window.onload = function() {
+  var imgs = document.getElementsByTagName('img'), i, img;
+  for (i = 0; i < imgs.length; i++) {
+    img = imgs[i];
+    // center an image if it is the only element of its parent
+    if (img.parentElement.childElementCount === 1)
+      img.parentElement.style.textAlign = 'center';
+  }
+};
+</script>
+
+<!-- Styles for R syntax highlighter -->
+<style type="text/css">
+   pre .operator,
+   pre .paren {
+     color: rgb(104, 118, 135)
+   }
+
+   pre .literal {
+     color: #990073
+   }
+
+   pre .number {
+     color: #099;
+   }
+
+   pre .comment {
+     color: #998;
+     font-style: italic
+   }
+
+   pre .keyword {
+     color: #900;
+     font-weight: bold
+   }
+
+   pre .identifier {
+     color: rgb(0, 0, 0);
+   }
+
+   pre .string {
+     color: #d14;
+   }
+</style>
+
+<!-- R syntax highlighter -->
+<script type="text/javascript">
+var hljs=new function(){function m(p){return p.replace(/&/gm,"&amp;").replace(/</gm,"&lt;")}function f(r,q,p){return RegExp(q,"m"+(r.cI?"i":"")+(p?"g":""))}function b(r){for(var p=0;p<r.childNodes.length;p++){var q=r.childNodes[p];if(q.nodeName=="CODE"){return q}if(!(q.nodeType==3&&q.nodeValue.match(/\s+/))){break}}}function h(t,s){var p="";for(var r=0;r<t.childNodes.length;r++){if(t.childNodes[r].nodeType==3){var q=t.childNodes[r].nodeValue;if(s){q=q.replace(/\n/g,"")}p+=q}else{if(t.childNodes[r].nodeName=="BR"){p+="\n"}else{p+=h(t.childNodes[r])}}}if(/MSIE [678]/.test(navigator.userAgent)){p=p.replace(/\r/g,"\n")}return p}function a(s){var r=s.className.split(/\s+/);r=r.concat(s.parentNode.className.split(/\s+/));for(var q=0;q<r.length;q++){var p=r[q].replace(/^language-/,"");if(e[p]){return p}}}function c(q){var p=[];(function(s,t){for(var r=0;r<s.childNodes.length;r++){if(s.childNodes[r].nodeType==3){t+=s.childNodes[r].nodeValue.length}else{if(s.childNodes[r].nodeName=="BR"){t+=1}else{if(s.childNodes[r].nodeType==1){p.push({event:"start",offset:t,node:s.childNodes[r]});t=arguments.callee(s.childNodes[r],t);p.push({event:"stop",offset:t,node:s.childNodes[r]})}}}}return t})(q,0);return p}function k(y,w,x){var q=0;var z="";var s=[];function u(){if(y.length&&w.length){if(y[0].offset!=w[0].offset){return(y[0].offset<w[0].offset)?y:w}else{return w[0].event=="start"?y:w}}else{return y.length?y:w}}function t(D){var A="<"+D.nodeName.toLowerCase();for(var B=0;B<D.attributes.length;B++){var C=D.attributes[B];A+=" "+C.nodeName.toLowerCase();if(C.value!==undefined&&C.value!==false&&C.value!==null){A+='="'+m(C.value)+'"'}}return A+">"}while(y.length||w.length){var v=u().splice(0,1)[0];z+=m(x.substr(q,v.offset-q));q=v.offset;if(v.event=="start"){z+=t(v.node);s.push(v.node)}else{if(v.event=="stop"){var p,r=s.length;do{r--;p=s[r];z+=("</"+p.nodeName.toLowerCase()+">")}while(p!=v.node);s.splice(r,1);while(r<s.length){z+=t(s[r]);r++}}}}return z+m(x.substr(q))}function j(){function q(x,y,v){if(x.compiled){return}var u;var s=[];if(x.k){x.lR=f(y,x.l||hljs.IR,true);for(var w in x.k){if(!x.k.hasOwnProperty(w)){continue}if(x.k[w] instanceof Object){u=x.k[w]}else{u=x.k;w="keyword"}for(var r in u){if(!u.hasOwnProperty(r)){continue}x.k[r]=[w,u[r]];s.push(r)}}}if(!v){if(x.bWK){x.b="\\b("+s.join("|")+")\\s"}x.bR=f(y,x.b?x.b:"\\B|\\b");if(!x.e&&!x.eW){x.e="\\B|\\b"}if(x.e){x.eR=f(y,x.e)}}if(x.i){x.iR=f(y,x.i)}if(x.r===undefined){x.r=1}if(!x.c){x.c=[]}x.compiled=true;for(var t=0;t<x.c.length;t++){if(x.c[t]=="self"){x.c[t]=x}q(x.c[t],y,false)}if(x.starts){q(x.starts,y,false)}}for(var p in e){if(!e.hasOwnProperty(p)){continue}q(e[p].dM,e[p],true)}}function d(B,C){if(!j.called){j();j.called=true}function q(r,M){for(var L=0;L<M.c.length;L++){if((M.c[L].bR.exec(r)||[null])[0]==r){return M.c[L]}}}function v(L,r){if(D[L].e&&D[L].eR.test(r)){return 1}if(D[L].eW){var M=v(L-1,r);return M?M+1:0}return 0}function w(r,L){return L.i&&L.iR.test(r)}function K(N,O){var M=[];for(var L=0;L<N.c.length;L++){M.push(N.c[L].b)}var r=D.length-1;do{if(D[r].e){M.push(D[r].e)}r--}while(D[r+1].eW);if(N.i){M.push(N.i)}return f(O,M.join("|"),true)}function p(M,L){var N=D[D.length-1];if(!N.t){N.t=K(N,E)}N.t.lastIndex=L;var r=N.t.exec(M);return r?[M.substr(L,r.index-L),r[0],false]:[M.substr(L),"",true]}function z(N,r){var L=E.cI?r[0].toLowerCase():r[0];var M=N.k[L];if(M&&M instanceof Array){return M}return false}function F(L,P){L=m(L);if(!P.k){return L}var r="";var O=0;P.lR.lastIndex=0;var M=P.lR.exec(L);while(M){r+=L.substr(O,M.index-O);var N=z(P,M);if(N){x+=N[1];r+='<span class="'+N[0]+'">'+M[0]+"</span>"}else{r+=M[0]}O=P.lR.lastIndex;M=P.lR.exec(L)}return r+L.substr(O,L.length-O)}function J(L,M){if(M.sL&&e[M.sL]){var r=d(M.sL,L);x+=r.keyword_count;return r.value}else{return F(L,M)}}function I(M,r){var L=M.cN?'<span class="'+M.cN+'">':"";if(M.rB){y+=L;M.buffer=""}else{if(M.eB){y+=m(r)+L;M.buffer=""}else{y+=L;M.buffer=r}}D.push(M);A+=M.r}function G(N,M,Q){var R=D[D.length-1];if(Q){y+=J(R.buffer+N,R);return false}var P=q(M,R);if(P){y+=J(R.buffer+N,R);I(P,M);return P.rB}var L=v(D.length-1,M);if(L){var O=R.cN?"</span>":"";if(R.rE){y+=J(R.buffer+N,R)+O}else{if(R.eE){y+=J(R.buffer+N,R)+O+m(M)}else{y+=J(R.buffer+N+M,R)+O}}while(L>1){O=D[D.length-2].cN?"</span>":"";y+=O;L--;D.length--}var r=D[D.length-1];D.length--;D[D.length-1].buffer="";if(r.starts){I(r.starts,"")}return R.rE}if(w(M,R)){throw"Illegal"}}var E=e[B];var D=[E.dM];var A=0;var x=0;var y="";try{var s,u=0;E.dM.buffer="";do{s=p(C,u);var t=G(s[0],s[1],s[2]);u+=s[0].length;if(!t){u+=s[1].length}}while(!s[2]);if(D.length>1){throw"Illegal"}return{r:A,keyword_count:x,value:y}}catch(H){if(H=="Illegal"){return{r:0,keyword_count:0,value:m(C)}}else{throw H}}}function g(t){var p={keyword_count:0,r:0,value:m(t)};var r=p;for(var q in e){if(!e.hasOwnProperty(q)){continue}var s=d(q,t);s.language=q;if(s.keyword_count+s.r>r.keyword_count+r.r){r=s}if(s.keyword_count+s.r>p.keyword_count+p.r){r=p;p=s}}if(r.language){p.second_best=r}return p}function i(r,q,p){if(q){r=r.replace(/^((<[^>]+>|\t)+)/gm,function(t,w,v,u){return w.replace(/\t/g,q)})}if(p){r=r.replace(/\n/g,"<br>")}return r}function n(t,w,r){var x=h(t,r);var v=a(t);var y,s;if(v){y=d(v,x)}else{return}var q=c(t);if(q.length){s=document.createElement("pre");s.innerHTML=y.value;y.value=k(q,c(s),x)}y.value=i(y.value,w,r);var u=t.className;if(!u.match("(\\s|^)(language-)?"+v+"(\\s|$)")){u=u?(u+" "+v):v}if(/MSIE [678]/.test(navigator.userAgent)&&t.tagName=="CODE"&&t.parentNode.tagName=="PRE"){s=t.parentNode;var p=document.createElement("div");p.innerHTML="<pre><code>"+y.value+"</code></pre>";t=p.firstChild.firstChild;p.firstChild.cN=s.cN;s.parentNode.replaceChild(p.firstChild,s)}else{t.innerHTML=y.value}t.className=u;t.result={language:v,kw:y.keyword_count,re:y.r};if(y.second_best){t.second_best={language:y.second_best.language,kw:y.second_best.keyword_count,re:y.second_best.r}}}function o(){if(o.called){return}o.called=true;var r=document.getElementsByTagName("pre");for(var p=0;p<r.length;p++){var q=b(r[p]);if(q){n(q,hljs.tabReplace)}}}function l(){if(window.addEventListener){window.addEventListener("DOMContentLoaded",o,false);window.addEventListener("load",o,false)}else{if(window.attachEvent){window.attachEvent("onload",o)}else{window.onload=o}}}var e={};this.LANGUAGES=e;this.highlight=d;this.highlightAuto=g;this.fixMarkup=i;this.highlightBlock=n;this.initHighlighting=o;this.initHighlightingOnLoad=l;this.IR="[a-zA-Z][a-zA-Z0-9_]*";this.UIR="[a-zA-Z_][a-zA-Z0-9_]*";this.NR="\\b\\d+(\\.\\d+)?";this.CNR="\\b(0[xX][a-fA-F0-9]+|(\\d+(\\.\\d*)?|\\.\\d+)([eE][-+]?\\d+)?)";this.BNR="\\b(0b[01]+)";this.RSR="!|!=|!==|%|%=|&|&&|&=|\\*|\\*=|\\+|\\+=|,|\\.|-|-=|/|/=|:|;|<|<<|<<=|<=|=|==|===|>|>=|>>|>>=|>>>|>>>=|\\?|\\[|\\{|\\(|\\^|\\^=|\\||\\|=|\\|\\||~";this.ER="(?![\\s\\S])";this.BE={b:"\\\\.",r:0};this.ASM={cN:"string",b:"'",e:"'",i:"\\n",c:[this.BE],r:0};this.QSM={cN:"string",b:'"',e:'"',i:"\\n",c:[this.BE],r:0};this.CLCM={cN:"comment",b:"//",e:"$"};this.CBLCLM={cN:"comment",b:"/\\*",e:"\\*/"};this.HCM={cN:"comment",b:"#",e:"$"};this.NM={cN:"number",b:this.NR,r:0};this.CNM={cN:"number",b:this.CNR,r:0};this.BNM={cN:"number",b:this.BNR,r:0};this.inherit=function(r,s){var p={};for(var q in r){p[q]=r[q]}if(s){for(var q in s){p[q]=s[q]}}return p}}();hljs.LANGUAGES.cpp=function(){var a={keyword:{"false":1,"int":1,"float":1,"while":1,"private":1,"char":1,"catch":1,"export":1,virtual:1,operator:2,sizeof:2,dynamic_cast:2,typedef:2,const_cast:2,"const":1,struct:1,"for":1,static_cast:2,union:1,namespace:1,unsigned:1,"long":1,"throw":1,"volatile":2,"static":1,"protected":1,bool:1,template:1,mutable:1,"if":1,"public":1,friend:2,"do":1,"return":1,"goto":1,auto:1,"void":2,"enum":1,"else":1,"break":1,"new":1,extern:1,using:1,"true":1,"class":1,asm:1,"case":1,typeid:1,"short":1,reinterpret_cast:2,"default":1,"double":1,register:1,explicit:1,signed:1,typename:1,"try":1,"this":1,"switch":1,"continue":1,wchar_t:1,inline:1,"delete":1,alignof:1,char16_t:1,char32_t:1,constexpr:1,decltype:1,noexcept:1,nullptr:1,static_assert:1,thread_local:1,restrict:1,_Bool:1,complex:1},built_in:{std:1,string:1,cin:1,cout:1,cerr:1,clog:1,stringstream:1,istringstream:1,ostringstream:1,auto_ptr:1,deque:1,list:1,queue:1,stack:1,vector:1,map:1,set:1,bitset:1,multiset:1,multimap:1,unordered_set:1,unordered_map:1,unordered_multiset:1,unordered_multimap:1,array:1,shared_ptr:1}};return{dM:{k:a,i:"</",c:[hljs.CLCM,hljs.CBLCLM,hljs.QSM,{cN:"string",b:"'\\\\?.",e:"'",i:"."},{cN:"number",b:"\\b(\\d+(\\.\\d*)?|\\.\\d+)(u|U|l|L|ul|UL|f|F)"},hljs.CNM,{cN:"preprocessor",b:"#",e:"$"},{cN:"stl_container",b:"\\b(deque|list|queue|stack|vector|map|set|bitset|multiset|multimap|unordered_map|unordered_set|unordered_multiset|unordered_multimap|array)\\s*<",e:">",k:a,r:10,c:["self"]}]}}}();hljs.LANGUAGES.r={dM:{c:[hljs.HCM,{cN:"number",b:"\\b0[xX][0-9a-fA-F]+[Li]?\\b",e:hljs.IMMEDIATE_RE,r:0},{cN:"number",b:"\\b\\d+(?:[eE][+\\-]?\\d*)?L\\b",e:hljs.IMMEDIATE_RE,r:0},{cN:"number",b:"\\b\\d+\\.(?!\\d)(?:i\\b)?",e:hljs.IMMEDIATE_RE,r:1},{cN:"number",b:"\\b\\d+(?:\\.\\d*)?(?:[eE][+\\-]?\\d*)?i?\\b",e:hljs.IMMEDIATE_RE,r:0},{cN:"number",b:"\\.\\d+(?:[eE][+\\-]?\\d*)?i?\\b",e:hljs.IMMEDIATE_RE,r:1},{cN:"keyword",b:"(?:tryCatch|library|setGeneric|setGroupGeneric)\\b",e:hljs.IMMEDIATE_RE,r:10},{cN:"keyword",b:"\\.\\.\\.",e:hljs.IMMEDIATE_RE,r:10},{cN:"keyword",b:"\\.\\.\\d+(?![\\w.])",e:hljs.IMMEDIATE_RE,r:10},{cN:"keyword",b:"\\b(?:function)",e:hljs.IMMEDIATE_RE,r:2},{cN:"keyword",b:"(?:if|in|break|next|repeat|else|for|return|switch|while|try|stop|warning|require|attach|detach|source|setMethod|setClass)\\b",e:hljs.IMMEDIATE_RE,r:1},{cN:"literal",b:"(?:NA|NA_integer_|NA_real_|NA_character_|NA_complex_)\\b",e:hljs.IMMEDIATE_RE,r:10},{cN:"literal",b:"(?:NULL|TRUE|FALSE|T|F|Inf|NaN)\\b",e:hljs.IMMEDIATE_RE,r:1},{cN:"identifier",b:"[a-zA-Z.][a-zA-Z0-9._]*\\b",e:hljs.IMMEDIATE_RE,r:0},{cN:"operator",b:"<\\-(?!\\s*\\d)",e:hljs.IMMEDIATE_RE,r:2},{cN:"operator",b:"\\->|<\\-",e:hljs.IMMEDIATE_RE,r:1},{cN:"operator",b:"%%|~",e:hljs.IMMEDIATE_RE},{cN:"operator",b:">=|<=|==|!=|\\|\\||&&|=|\\+|\\-|\\*|/|\\^|>|<|!|&|\\||\\$|:",e:hljs.IMMEDIATE_RE,r:0},{cN:"operator",b:"%",e:"%",i:"\\n",r:1},{cN:"identifier",b:"`",e:"`",r:0},{cN:"string",b:'"',e:'"',c:[hljs.BE],r:0},{cN:"string",b:"'",e:"'",c:[hljs.BE],r:0},{cN:"paren",b:"[[({\\])}]",e:hljs.IMMEDIATE_RE,r:0}]}};
+hljs.initHighlightingOnLoad();
+</script>
+
+
+
+<style type="text/css">
+body, td {
+   font-family: sans-serif;
+   background-color: white;
+   font-size: 13px;
+}
+
+body {
+  max-width: 800px;
+  margin: auto;
+  padding: 1em;
+  line-height: 20px;
+}
+
+tt, code, pre {
+   font-family: 'DejaVu Sans Mono', 'Droid Sans Mono', 'Lucida Console', Consolas, Monaco, monospace;
+}
+
+h1 {
+   font-size:2.2em;
+}
+
+h2 {
+   font-size:1.8em;
+}
+
+h3 {
+   font-size:1.4em;
+}
+
+h4 {
+   font-size:1.0em;
+}
+
+h5 {
+   font-size:0.9em;
+}
+
+h6 {
+   font-size:0.8em;
+}
+
+a:visited {
+   color: rgb(50%, 0%, 50%);
+}
+
+pre, img {
+  max-width: 100%;
+}
+pre {
+  overflow-x: auto;
+}
+pre code {
+   display: block; padding: 0.5em;
+}
+
+code {
+  font-size: 92%;
+  border: 1px solid #ccc;
+}
+
+code[class] {
+  background-color: #F8F8F8;
+}
+
+table, td, th {
+  border: none;
+}
+
+blockquote {
+   color:#666666;
+   margin:0;
+   padding-left: 1em;
+   border-left: 0.5em #EEE solid;
+}
+
+hr {
+   height: 0px;
+   border-bottom: none;
+   border-top-width: thin;
+   border-top-style: dotted;
+   border-top-color: #999999;
+}
+
+@media print {
+   * {
+      background: transparent !important;
+      color: black !important;
+      filter:none !important;
+      -ms-filter: none !important;
+   }
+
+   body {
+      font-size:12pt;
+      max-width:100%;
+   }
+
+   a, a:visited {
+      text-decoration: underline;
+   }
+
+   hr {
+      visibility: hidden;
+      page-break-before: always;
+   }
+
+   pre, blockquote {
+      padding-right: 1em;
+      page-break-inside: avoid;
+   }
+
+   tr, img {
+      page-break-inside: avoid;
+   }
+
+   img {
+      max-width: 100% !important;
+   }
+
+   @page :left {
+      margin: 15mm 20mm 15mm 10mm;
+   }
+
+   @page :right {
+      margin: 15mm 10mm 15mm 20mm;
+   }
+
+   p, h2, h3 {
+      orphans: 3; widows: 3;
+   }
+
+   h2, h3 {
+      page-break-after: avoid;
+   }
+}
+</style>
+
+
+
+</head>
+
+<body>
+<h1>Count tRNA features in matched tumor-normal PRAD reads</h1>
+
+<p><em>Last modified 07:08 PM on Nov 20, 2014. This document, R session image, knitr cache, figures, and other associated datasets are located in <code>cruncher:/inside/grotto/blin/trna-markers/feature-counts/</code>.</em></p>
+
+<pre><code class="r">library(GenomicRanges)
+library(GenomicAlignments)
+library(GenomicFeatures)
+library(Rsamtools)
+library(stringr)
+source(&#39;/inside/grotto/blin/programs/convertChrNames.R&#39;)
+</code></pre>
+
+<p>tRNA fragments have been implicated in cancer. For instance, tRF-1001 was shown to be required for prostate cancer cell proliferation in <a href="http://www.ncbi.nlm.nih.gov/pubmed/19933153">Lee et al. 2009</a>. We want to generate a list of other such tRNA fragments for further analysis. Rather than looking at the differential expression of tRFs, we will use miRNAs known to be involved in cancer as a proxy for correlating tRFs with cancer. To do that, we&#39;ll generate a list of paired TCGA PRAD datasets and download them, re-map the reads to a feature list that includes a few key miRNAs, then generate a matrix of counts. Correlations and corresponding statistical analyses can be found in <a href="file:///Users/blin/Desktop/grotto/trna-markers/correlate-features/correlate-features.html">correlate-features</a>.</p>
+
+<h2>Tumor-normal matched data</h2>
+
+<p>The TCGA BAM files are huge and can be upwards to 50 Gb per file. To the best of my knowledge, there is no easy way to generate a list of matched tumor-normal pairs (from the same patient, tumor sequencing data and normal tissue sequencing data) from <a href="https://browser.cghub.ucsc.edu/">CGHub</a>. I downloaded a <a href="file:///Users/blin/Desktop/grotto/trna-markers/feature-counts/prad-summary.tab">summary tab-separated file</a>, filtering for PRAD miRNA-Seq assembled with hg19/GRCh37. Now, let&#39;s match the pairs with 2 criteria: each person must have one TP (primary tumor) and one NT (normal tissue) dataset, and newer data is preferred over older data.</p>
+
+<p>Upon visual inspection, all NT datasets have at least one TP dataset from the same patient (participant). We can filter out datasets by existence of the NT file, then grab the most recent TP and NT datasets for each patient.</p>
+
+<pre><code class="r">prad_metadata &lt;- read.table(&#39;/inside/grotto/blin/trna-markers/feature-counts/prad-summary.tab&#39;, header=TRUE, sep=&#39;\t&#39;, as.is=TRUE)
+matchTumorNormalPairs &lt;- function(metadata) {
+  metadata &lt;- metadata[, c(&#39;barcode&#39;, &#39;sample_type&#39;, &#39;filename&#39;, &#39;analysis_id&#39;, &#39;uploaded&#39;, &#39;participant_id&#39;)]
+  # convert character &quot;uploaded&quot; column to date object for easier comparison
+  metadata$uploaded &lt;- strptime(gsub(&quot;/&quot;, &quot;-&quot;, metadata$uploaded), &quot;%m-%d-%y&quot;)
+  # all NT datasets have at least one TP dataset from the same patient (participant). We can filter out datasets by existence of the NT file, then grab the most recent TP and NT datasets for each patient.
+  metadata &lt;- subset(metadata, participant_id %in% unique(subset(metadata, sample_type==&quot;NT&quot;)$participant_id))
+  matched_pairs &lt;- data.frame()
+  for (current_id in unique(metadata$participant_id)) {
+    nt &lt;- subset(metadata, participant_id == current_id &amp; sample_type == &quot;NT&quot;)
+    tp &lt;- subset(metadata, participant_id == current_id &amp; sample_type == &quot;TP&quot;)
+    matched_pairs &lt;- rbind(matched_pairs, tp[which(tp$uploaded == max(tp$uploaded)), ], nt[which(nt$uploaded == max(nt$uploaded)), ])
+  }
+  matched_pairs
+}
+</code></pre>
+
+<pre><code class="r">prad_metadata &lt;- matchTumorNormalPairs(prad_metadata)
+head(prad_metadata[, c(&#39;barcode&#39;, &#39;sample_type&#39;)])
+</code></pre>
+
+<pre><code>##                          barcode sample_type
+## 15  TCGA-HC-8260-01A-11R-2262-13          TP
+## 214 TCGA-HC-8260-11A-01R-2262-13          NT
+## 16  TCGA-EJ-7793-01A-31R-2262-13          TP
+## 272 TCGA-EJ-7793-11A-01R-2262-13          NT
+## 219 TCGA-EJ-7123-01A-11R-1964-13          TP
+## 21  TCGA-EJ-7123-11A-01R-1964-13          NT
+</code></pre>
+
+<p>Now that we have a list, we&#39;ll want to download the actual files. This may take a few hours or days to run, depending on how much TCGA data there is.</p>
+
+<pre><code class="r">write(prad_metadata$analysis_id, file=&quot;prad-paired.txt&quot;)
+</code></pre>
+
+<pre><code class="bash">cd /inside/grotto/blin/trna-markers/mirna/prad
+for uuid in `cat /inside/grotto/blin/trna-markers/feature-counts/prad-paired.txt`; do
+  gtdownload -c $CGKEY -d $uuid;
+  rm $uuid.gto;
+  mv $uuid/*.bam .;
+  rm -rf $uuid
+done
+cd /inside/grotto/blin/trna-markers/feature-counts
+</code></pre>
+
+<pre><code class="r">numbering &lt;- formatC(sort(rep(1:(length(prad_metadata$filename)/2), 2)), flag=&quot;0&quot;, digits=2) # each patient is designated a 3 digit number
+filenames &lt;- paste0(&#39;prad-&#39;, numbering, &quot;-&quot;, prad_metadata$sample_type, &quot;.bam&quot;) # each patient has 2 datasets
+</code></pre>
+
+<pre><code class="r">currentwd &lt;- getwd() 
+setwd(&#39;/inside/grotto/blin/trna-markers/mirna/prad&#39;)
+file.rename(prad_metadata$filename, filenames)
+setwd(currentwd)
+</code></pre>
+
+<h2>Remap reads</h2>
+
+<p>Originally, the plan was to remap the reads to hg19 and to the extended feature list containing tRNA halves. The main advantage of this would be to enable multimapping reads, since the original mapping maps reads to single locations. We also don&#39;t know what assembler, options, or assumptions were made for the TCGA miRNA mapping. A side benefit of remapping would be to keep the cancer data comparable with our lab internal sequencing data.* </p>
+
+<pre><code class="bash">cd /inside/grotto/blin/trna-markers/mirna/prad
+for prefix in `ls *-TP.bam *-NT.bam | cut -f 1 -d .`; do
+  if [ ! -e $prefix.fastq ]
+  then
+    bam2fastq --force -o $prefix# $prefix.bam
+    mv ${prefix}_M $prefix.fastq
+    rm ${prefix}_1 ${prefix}_2
+  fi
+  if [ ! -e $prefix-hg19-sorted.bam ] &amp;&amp; [ ! -e $prefix-tRNA-sorted.bam ]
+  then
+    bowtie2 -x ~/grotto/data/hg19 -k 100 -U ${prefix}.fastq -S $prefix-hg19.sam
+    bowtie2 -x ~/grotto/data/hg19-tRNAs -k 100 -U ${prefix}.fastq -S $prefix-tRNAs.sam
+    samtools view -S -F 4 -h -u $prefix-hg19.sam | samtools view -F 512 -h  - &gt; $prefix-hg19-mapped.sam
+    samtools view -S -F 4 -h -u $prefix-tRNAs.sam | samtools view -F 512 -h  - &gt; $prefix-tRNAs-mapped.sam
+    bowtie2-best-mapped.py $prefix-hg19-mapped.sam | samtools view -S -u - | samtools sort - $prefix-hg19-sorted # auto appends .bam
+    bowtie2-best-mapped.py $prefix-tRNAs-mapped.sam | samtools view -S -u - | samtools sort - $prefix-tRNA-sorted
+  fi
+  rm $prefix.fastq
+  rm $prefix-hg19.sam
+  rm $prefix-tRNAs.sam
+  rm $prefix-hg19-mapped.sam
+  rm $prefix-tRNAs-mapped.sam
+done
+cd /inside/grotto/blin/trna-markers/feature-counts/
+</code></pre>
+
+<p>This code is adapted from external scripts. We iterate through all downloaded BAM files, convert them to fastq using <code>bam2fastq</code>, map them to hg19 and mature tRNAs with <code>bowtie2</code> with a maximum of 100 mappings, and filter out unmapped and low quality reads using <code>samtools</code>**. <code>bowtie2-best-mapped.py</code>, adapted from Andrew&#39;s script, finds the best scoring multimappings from <code>bowtie2</code> output and discards multimappings with lower scores.</p>
+
+<pre><code class="r">prad_metadata$tRNA_mapped &lt;- paste0(&#39;prad-&#39;, numbering, &quot;-&quot;, prad_metadata$sample_type, &quot;-tRNA-sorted.bam&quot;)
+prad_metadata$hg19_mapped &lt;- paste0(&#39;prad-&#39;, numbering, &quot;-&quot;, prad_metadata$sample_type, &quot;-hg19-sorted.bam&quot;) 
+</code></pre>
+
+<p>We want to be able to reference the different bam files mapped to either mature tRNAs or hg19.</p>
+
+<p><small>* Many aspects of preprocessing are unknown and may make the two datasets incomparable to begin with.</small></p>
+
+<p><small>** TODO: find out what the &ldquo;low quality&rdquo; flag entails. Andrew&#39;s counts check for 10bp overlap, but a high quality read might just be good enough.</small></p>
+
+<h2>Generate matrix of counts</h2>
+
+<p>We map to both hg19 and mature tRNAs. Getting counts for tRNAs is easier - let&#39;s start there.</p>
+
+<h3>tRNA counts</h3>
+
+<p>The following code reads in the BAM files as a <code>GAlignmentsList</code>, separately for normal tissue and primary tumor data. The function <code>trnaCountsFromBam()</code> will return a matrix of counts. Matrix columns correspond to samples (e.g., patient 3, TP, tRNA mapped) while rows correspond to tRNAs. The entries themselves are the counts of the tRNA for this sample.</p>
+
+<pre><code class="r">trnaCountsFromBam &lt;- function(bamfiles, dir=&quot;.&quot;) {
+  currentwd &lt;- getwd()
+  setwd(dir)
+  galignments &lt;- GAlignmentsList(sapply(bamfiles, function(file) readGAlignments(file)))
+  setwd(currentwd)
+  sapply(galignments, function(locus) max(coverage(locus)))
+}
+</code></pre>
+
+<pre><code class="r">trna_nt_counts &lt;- trnaCountsFromBam(subset(prad_metadata, sample_type == &quot;NT&quot;)$tRNA_mapped, &#39;/inside/grotto/blin/trna-markers/mirna/prad&#39;)
+trna_tp_counts &lt;- trnaCountsFromBam(subset(prad_metadata, sample_type == &quot;TP&quot;)$tRNA_mapped, &#39;/inside/grotto/blin/trna-markers/mirna/prad&#39;)
+</code></pre>
+
+<p>The counts are not particularly stringent, and they rely on the bowtie2 algorithm to generate good alignments. We don&#39;t have to worry about overhanging alignments too much since any decent alignment program will only generate those given sequence outside of the loci of interest. </p>
+
+<h3>Feature counts</h3>
+
+<p>This is not applicable to hg19 mapped reads; there will be plenty of overhanging alignments, so we will use a minimum overlap of 5 bp (since the reads are generally 20 bp in length). hg19 mapped reads also are mapped to the chromosomes/contigs, so we will need to extract alignments that overlap with a feature list. Andrew has generated a feature list (available at <code>/inside/grotto/blin/trna-markers/feature-counts/hg19-trnahalfs.gtf</code>), so we&#39;ll use that for now. It&#39;s stored as a <code>.gtf</code> file, which I can read in and convert to a <code>GRanges</code> object. This makes it easier to combine it with miRNAs (see below). Currently, there is an issue with Andrew&#39;s covariance model that results in reversed 5&#39; tRFs, with end = start - 1. For the time being, those features have been deleted from the list. </p>
+
+<p>Recently, <a href="http://genome.bioch.virginia.edu/trfdb/">tRFdb</a> was released, with 552 human tRNA fragments. These were downloaded into <code>/inside/grotto/blin/data/tRFdb-human.tab</code>, and processed into a better file format, <code>tRFdb-human.gtf</code>. </p>
+
+<pre><code class="r">halves &lt;- read.delim(&#39;hg19-trnahalves.gtf&#39;, header = FALSE, col.names = c(&quot;seqid&quot;, &quot;source&quot;, &quot;type&quot;, &quot;start&quot;, &quot;end&quot;, &quot;score&quot;, &quot;strand&quot;, &quot;phase&quot;, &quot;attributes&quot;))
+halves &lt;- GRanges(seqnames = halves$seqid, ranges = IRanges(halves$start, halves$end), strand = halves$strand, tx_name = str_extract(halves$attributes, &quot;(tRNA|chr\\w+\\.\\w+|nmt)(-\\w+\\?*)+_(threefrag|fivefrag|trailer)&quot;))
+mcols(halves)$class &lt;- &quot;trailer&quot;
+mcols(halves[str_detect(mcols(halves)$tx_name, &quot;threefrag&quot;)])$class &lt;- &quot;threehalf&quot;
+</code></pre>
+
+<pre><code>## Error in IRanges:::normalizeSingleBracketSubscript(i, x): subscript contains NAs
+</code></pre>
+
+<pre><code class="r">mcols(halves[str_detect(mcols(halves)$tx_name, &quot;fivefrag&quot;)])$class &lt;- &quot;fivehalf&quot;
+</code></pre>
+
+<pre><code>## Error in IRanges:::normalizeSingleBracketSubscript(i, x): subscript contains NAs
+</code></pre>
+
+<pre><code class="r">halves &lt;- convertChrNames(halves, &quot;Ensembl&quot;)
+</code></pre>
+
+<pre><code class="r">frags &lt;- read.delim(&#39;tRFdb-human.gtf&#39;, comment.char = &quot;#&quot;, header = FALSE, col.names = c(&quot;seqid&quot;, &quot;source&quot;, &quot;type&quot;, &quot;start&quot;, &quot;end&quot;, &quot;score&quot;, &quot;strand&quot;, &quot;phase&quot;, &quot;attributes&quot;))
+frags$strand &lt;- ifelse(frags$start - frags$end &lt; 0, &quot;+&quot;, &quot;-&quot;)
+frags[frags$strand == &quot;-&quot;, c(&quot;start&quot;, &quot;end&quot;)] &lt;- frags[frags$strand == &quot;-&quot;, c(&quot;end&quot;, &quot;start&quot;)]
+frags &lt;- GRanges(seqnames = frags$seqid, ranges = IRanges(frags$start, frags$end), strand = ifelse(frags$start - frags$end &lt; 0, &quot;+&quot;, &quot;-&quot;), tx_name = paste0(str_extract(frags$attributes, &quot;(chr.+trna\\d+-\\w+)&quot;), &quot;-&quot;, str_extract(frags$attributes, &quot;\\d\\d\\d\\d\\w?&quot;)))
+frags &lt;- convertChrNames(frags, &quot;Ensembl&quot;)
+</code></pre>
+
+<p>I had what Aaron called an &ldquo;A-list&rdquo; of miRNAs involved in prostate cancer. These are now documented in <a href="correlate-mirnas.html">correlate-mirnas</a>. I am now following suggestions to just throw the entire human miRNA pool in and extracting what we need later.</p>
+
+<p>Combining the miRNAs with the tRNA halves is simple with <code>GRanges</code>. We just need to read them in first. The miRNAs are formatted as a bed file. In the interest of having a more complete set of data, I am using the entire miRNA primary transcript.</p>
+
+<pre><code class="r">mirnas &lt;- read.delim(&#39;/inside/grotto/blin/data/mir-hsa-primary.gff3&#39;, header=FALSE, stringsAsFactors=FALSE, col.names = c(&quot;seqid&quot;, &quot;source&quot;, &quot;type&quot;, &quot;start&quot;, &quot;end&quot;, &quot;score&quot;, &quot;strand&quot;, &quot;phase&quot;, &quot;attributes&quot;))
+mirnas &lt;- GRanges(seqnames=mirnas$seqid, ranges=IRanges(start=mirnas$start, end=mirnas$end), strand=mirnas$strand, tx_name=str_extract(mirnas$attributes, &quot;hsa(-\\w+)+&quot;))
+mirnas &lt;- convertChrNames(mirnas, &quot;Ensembl&quot;)
+mcols(mirnas)$class &lt;- &quot;miRNA&quot;
+features &lt;- c(halves, frags, mirnas)
+</code></pre>
+
+<pre><code>## Error in .Method(..., deparse.level = deparse.level): number of columns for arg 2 do not match those of first arg
+</code></pre>
+
+<p>Reads for TCGA miRNA tend to be between 20-30 bp. If the overlap between a locus and a pair of reads is greater than or equal to 5 bp, we consider it one transcript spanning the feature. The following function is similar to the above, and returns a matrix with rows as features and columns as the sample. We don&#39;t need to divide the counts by feature length because miRNA sequencing is typically not fragmented prior to sequencing. </p>
+
+<pre><code class="r">hg19FeatureCountsFromBam &lt;- function(bamfiles, features, dir=&quot;.&quot;) {
+  currentwd &lt;- getwd()
+  setwd(dir)
+  samples &lt;- GAlignmentsList(sapply(bamfiles, function(file) readGAlignments(file)))
+  samples &lt;- convertChrNames(samples, &#39;Ensembl&#39;)
+  setwd(currentwd)
+  sapply(samples, function(galignments) countOverlaps(features, galignments, minoverlap=5))
+}
+</code></pre>
+
+<pre><code class="r">hg19_feature_nt_counts &lt;- hg19FeatureCountsFromBam(subset(prad_metadata, sample_type == &quot;NT&quot;)$hg19_mapped, features, &#39;/inside/grotto/blin/trna-markers/mirna/prad&#39;)
+hg19_feature_tp_counts &lt;- hg19FeatureCountsFromBam(subset(prad_metadata, sample_type == &quot;TP&quot;)$hg19_mapped, features, &#39;/inside/grotto/blin/trna-markers/mirna/prad&#39;)
+</code></pre>
+
+<pre><code>## Error: cannot allocate vector of size 2.4 Gb
+</code></pre>
+
+<h3>Data wrangling</h3>
+
+<p>The code above generates data that needs to be formatted in a way that we can reference in later steps. We add feature names to <code>hg19_feature_counts</code> (this is not handled already unlike with tRNA counts) and convert the counts to data frames.</p>
+
+<pre><code class="r">rownames(hg19_feature_tp_counts) &lt;- mcols(features)$tx_name
+rownames(hg19_feature_nt_counts) &lt;- mcols(features)$tx_name
+hg19_feature_tp_counts &lt;- as.data.frame(hg19_feature_tp_counts)
+hg19_feature_nt_counts &lt;- as.data.frame(hg19_feature_nt_counts)
+trna_tp_counts &lt;- as.data.frame(trna_tp_counts)
+trna_nt_counts &lt;- as.data.frame(trna_nt_counts)
+save(file=&quot;feature-counts.RData&quot;, hg19_feature_nt_counts, hg19_feature_tp_counts, trna_tp_counts, trna_nt_counts, features)
+</code></pre>
+
+<p>Next step: find correlations between miRNA and feature counts!</p>
+
+</body>
+
+</html>

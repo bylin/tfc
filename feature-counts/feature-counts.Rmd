@@ -1,0 +1,209 @@
+# Count tRNA features in matched tumor-normal PRAD reads
+_Last modified `r format(Sys.time(), "%I:%M %p on %b %d, %Y")`. This document, R session image, knitr cache, figures, and other associated datasets are located in `cruncher:/inside/grotto/blin/trna-markers/feature-counts/`._
+
+```{r setup, echo=FALSE, warning=FALSE, results=FALSE, message=FALSE, errors=FALSE, cache=FALSE}
+library(knitr)
+opts_chunk$set(cache=TRUE, cache.path="/inside/grotto/blin/trna-markers/feature-counts/cache/", eval=TRUE, echo=TRUE, warning=FALSE, results=FALSE, message=FALSE, autodep=TRUE, dev="png", dpi=300)
+```
+
+```{r libraries, cache=FALSE}
+library(GenomicRanges)
+library(GenomicAlignments)
+library(GenomicFeatures)
+library(Rsamtools)
+library(stringr)
+source('/inside/grotto/blin/programs/convertChrNames.R')
+```
+
+tRNA fragments have been implicated in cancer. For instance, tRF-1001 was shown to be required for prostate cancer cell proliferation in [Lee et al. 2009](http://www.ncbi.nlm.nih.gov/pubmed/19933153). We want to generate a list of other such tRNA fragments for further analysis. Rather than looking at the differential expression of tRFs, we will use miRNAs known to be involved in cancer as a proxy for correlating tRFs with cancer. To do that, we'll generate a list of TCGA PRAD datasets and download them, re-map the reads to a feature list that includes a few key miRNAs, then generate a matrix of counts. Correlations and corresponding statistical analyses can be found in [correlate-features](correlate-features.html).
+
+## Tumor-normal matched data
+The TCGA BAM files are huge and can be upwards to 50 Gb per file. To the best of my knowledge, there is no easy way to generate a list of matched tumor-normal pairs (from the same patient, tumor sequencing data and normal tissue sequencing data) from [CGHub](https://browser.cghub.ucsc.edu/). I downloaded a [summary tab-separated file](file:///Users/blin/Desktop/grotto/trna-markers/feature-counts/prad-summary.tab), filtering for PRAD miRNA-Seq assembled with hg19/GRCh37. 
+
+The TCGA data has a lot of extraneous samples. Each person either has one TP (primary tumor) dataset, one NT (normal tissue) dataset, or both. Newer data is preferred over older data. I first get matched TP-NT samples by participant ID, then for unmatched samples, I simply filter for the most recent sample (again by participant). Upon visual inspection, all NT datasets have at least one TP dataset from the same patient (participant). We can filter out datasets by existence of the NT file, then grab the most recent TP and NT datasets for each patient.
+
+```{r parse-metadata-function}
+parseMetadata <- function(metadata) {
+  metadata <- metadata[, c('barcode', 'sample_type', 'filename', 'analysis_id', 'uploaded', 'participant_id')]
+  # convert character "uploaded" column to date object for easier comparison
+  metadata$uploaded <- strptime(gsub("/", "-", metadata$uploaded), "%m-%d-%y")
+  # start by getting matched pairs
+  # all NT datasets have at least one TP dataset from the same patient (participant). We can filter out datasets by existence of the NT file, then grab the most recent TP and NT datasets for each patient.
+  paired <- subset(metadata, participant_id %in% unique(subset(metadata, sample_type=="NT")$participant_id))
+  paired$paired <- TRUE # remember which samples are matched tumor/normal
+  parsed_metadata <- data.frame()
+  for (current_id in unique(paired$participant_id)) {
+    nt <- subset(paired, participant_id == current_id & sample_type == "NT")
+    tp <- subset(paired, participant_id == current_id & sample_type == "TP")
+    parsed_metadata <- rbind(parsed_metadata, tp[which(tp$uploaded == max(tp$uploaded)), ], nt[which(nt$uploaded == max(nt$uploaded)), ])
+  }
+  # now for the NT and TP singles. 
+  singles <- metadata[which(!(metadata$participant_id %in% parsed_metadata$participant_id)), ]
+  singles$paired <- FALSE
+  for (current_id in unique(singles$participant_id)) {
+    ps <- subset(singles, participant_id == current_id) # get all samples for this participant
+    parsed_metadata <- rbind(parsed_metadata, ps[which(ps$uploaded == max(ps$uploaded)), ])
+  }
+  parsed_metadata
+}
+```
+
+```{r parse-metadata}
+prad_metadata <- read.table('/inside/grotto/blin/trna-markers/feature-counts/prad-summary.tab', header=TRUE, sep='\t', as.is=TRUE)
+prad_metadata <- parseMetadata(prad_metadata)
+```
+
+It's difficult to work with the raw filenames (e.g. `TCGA-HC-8260-11A-01R-2262-13_mirna.bam`). We want to use something more along the lines of `prad-001-TP.bam`, with the number corresponding to a patient. 
+
+```{r rename-files}
+numbering <- match(prad_metadata$participant_id, unique(prad_metadata$participant_id)) # assign each patient new ID, internal to this analysis
+numbering <- formatC(numbering, flag = "0", digits = 3) # convert to 4 digit number (may need to accomodate many more patients/samples in the future
+prad_metadata$shortnames <- paste0('prad-', numbering, "-", prad_metadata$sample_type, ".bam")
+currentwd <- getwd() 
+setwd('/inside/grotto/blin/trna-markers/mirna/prad')
+file.rename(prad_metadata$filename, prad_metadata$shortnames)
+setwd(currentwd)
+write(prad_metadata$analysis_id, file="prad-samples.txt")
+```
+
+The analysis IDs are written to a file so `bash` can run `gtdownload`. This may take a few hours or days to run, depending on how much TCGA data there is.
+
+
+```{r download-files, engine="bash"}
+cd /inside/grotto/blin/trna-markers/mirna/prad
+for uuid in `cat /inside/grotto/blin/trna-markers/feature-counts/prad-samples.txt`; do
+  gtdownload -c $CGKEY -d $uuid;
+  rm $uuid.gto;
+  mv $uuid/*.bam .;
+  rm -rf $uuid
+done
+cd /inside/grotto/blin/trna-markers/feature-counts
+```
+
+
+## Remap reads
+
+Originally, the plan was to remap the reads to hg19 and to the extended feature list containing tRNA halves. The main advantage of this would be to enable multimapping reads, since the original mapping maps reads to single locations. We also don't know what assembler, options, or assumptions were made for the TCGA miRNA mapping. A side benefit of remapping would be to keep the cancer data comparable with our lab internal sequencing data.* 
+
+
+```{r remap, engine="bash"}
+cd /inside/grotto/blin/trna-markers/mirna/prad
+for prefix in `ls *-TP.bam *-NT.bam | cut -f 1 -d .`; do
+  if [ ! -e $prefix.fastq ]
+  then
+    bam2fastq --force -o $prefix# $prefix.bam
+    mv ${prefix}_M $prefix.fastq
+    rm ${prefix}_1 ${prefix}_2
+  fi
+  if [ ! -e $prefix-mapped.bam ]
+  then
+    bowtie2 -x ~/grotto/data/hg19 -k 100 -U ${prefix}.fastq -S $prefix-mapped-1.sam
+    samtools view -S -F 4 -h -u $prefix-mapped-1.sam | samtools view -F 512 -h  - > $prefix-mapped-2.sam
+    bowtie2-best-mapped.py $prefix-mapped-2.sam | samtools view -S -u - | samtools sort - $prefix-mapped # auto appends .bam
+  fi
+  rm $prefix.fastq
+  rm $prefix-mapped-1.sam
+  rm $prefix-mapped-2.sam
+done
+cd /inside/grotto/blin/trna-markers/feature-counts/
+```
+
+This code is adapted from external scripts. We iterate through all downloaded BAM files, convert them to fastq using `bam2fastq`, map them to hg19 and mature tRNAs with `bowtie2` with a maximum of 100 mappings, and filter out unmapped and low quality reads using `samtools`**. `bowtie2-best-mapped.py`, adapted from Andrew's script, finds the best scoring multimappings from `bowtie2` output and discards multimappings with lower scores.
+
+## Generate matrix of counts
+
+We map to both hg19 and mature tRNAs. Getting counts for tRNAs is easier - let's start there.
+
+### tRNA counts
+
+The following code reads in the BAM files as a `GAlignmentsList`, separately for normal tissue and primary tumor data. The function `trnaCountsFromBam()` will return a matrix of counts. Matrix columns correspond to samples (e.g., patient 3, TP, tRNA mapped) while rows correspond to tRNAs. The entries themselves are the counts of the tRNA for this sample.
+
+```{r trna-counts-function}
+trnaCountsFromBam <- function(bamfiles, dir=".") {
+  currentwd <- getwd()
+  setwd(dir)
+  galignments <- GAlignmentsList(sapply(bamfiles, function(file) readGAlignments(file)))
+  setwd(currentwd)
+  sapply(galignments, function(locus) max(coverage(locus)))
+}
+```
+
+```{r trna-counts}
+trna_nt_counts <- trnaCountsFromBam(subset(prad_metadata, sample_type == "NT")$tRNA_mapped, '/inside/grotto/blin/trna-markers/mirna/prad')
+trna_tp_counts <- trnaCountsFromBam(subset(prad_metadata, sample_type == "TP")$tRNA_mapped, '/inside/grotto/blin/trna-markers/mirna/prad')
+```
+
+The counts are not particularly stringent, and they rely on the bowtie2 algorithm to generate good alignments. We don't have to worry about overhanging alignments too much since any decent alignment program will only generate those given sequence outside of the loci of interest. 
+
+### Feature counts
+This is not applicable to hg19 mapped reads; there will be plenty of overhanging alignments, so we will use a minimum overlap of 5 bp (since the reads are generally 20 bp in length). hg19 mapped reads also are mapped to the chromosomes/contigs, so we will need to extract alignments that overlap with a feature list. Andrew has generated a feature list (available at `/inside/grotto/blin/trna-markers/feature-counts/hg19-trnahalfs.gtf`), so we'll use that for now. It's stored as a `.gtf` file, which I can read in and convert to a `GRanges` object. This makes it easier to combine it with miRNAs (see below). Currently, there is an issue with Andrew's covariance model that results in reversed 5' tRFs, with end = start - 1. For the time being, those features have been deleted from the list. 
+
+Recently, [tRFdb](http://genome.bioch.virginia.edu/trfdb/) was released, with 552 human tRNA fragments. These were downloaded into `/inside/grotto/blin/data/tRFdb-human.tab`, and processed into a better file format, `tRFdb-human.gtf`. 
+
+```{r features-halves}
+halves <- read.delim('hg19-trnahalves.gtf', header = FALSE, col.names = c("seqid", "source", "type", "start", "end", "score", "strand", "phase", "attributes"))
+halves <- GRanges(seqnames = halves$seqid, ranges = IRanges(halves$start, halves$end), strand = halves$strand, tx_name = str_extract(halves$attributes, "(tRNA|chr\\w+\\.\\w+|nmt)(-\\w+\\?*)+_(threefrag|fivefrag|trailer)"))
+mcols(halves)$class <- "trailer"
+mcols(halves[str_detect(mcols(halves)$tx_name, "threefrag")])$class <- "threehalf"
+mcols(halves[str_detect(mcols(halves)$tx_name, "fivefrag")])$class <- "fivehalf"
+halves <- convertChrNames(halves, "Ensembl")
+```
+
+```{r features-fragments}
+frags <- read.delim('tRFdb-human.gtf', comment.char = "#", header = FALSE, col.names = c("seqid", "source", "type", "start", "end", "score", "strand", "phase", "attributes"))
+frags$strand <- ifelse(frags$start - frags$end < 0, "+", "-")
+frags[frags$strand == "-", c("start", "end")] <- frags[frags$strand == "-", c("end", "start")]
+frags <- GRanges(seqnames = frags$seqid, ranges = IRanges(frags$start, frags$end), strand = ifelse(frags$start - frags$end < 0, "+", "-"), tx_name = paste0(str_extract(frags$attributes, "(chr.+trna\\d+-\\w+)"), "-", str_extract(frags$attributes, "\\d\\d\\d\\d\\w?")))
+frags <- convertChrNames(frags, "Ensembl")
+```
+
+I had what Aaron called an "A-list" of miRNAs involved in prostate cancer. These are now documented in [correlate-mirnas](correlate-mirnas.html). I am now following suggestions to just throw the entire human miRNA pool in and extracting what we need later.
+
+Combining the miRNAs with the tRNA halves is simple with `GRanges`. We just need to read them in first. The miRNAs are formatted as a bed file. In the interest of having a more complete set of data, I am using the entire miRNA primary transcript.
+
+```{r features-mirnas}
+mirnas <- read.delim('/inside/grotto/blin/data/mir-hsa-primary.gff3', header=FALSE, stringsAsFactors=FALSE, col.names = c("seqid", "source", "type", "start", "end", "score", "strand", "phase", "attributes"))
+mirnas <- GRanges(seqnames=mirnas$seqid, ranges=IRanges(start=mirnas$start, end=mirnas$end), strand=mirnas$strand, tx_name=str_extract(mirnas$attributes, "hsa(-\\w+)+"))
+mirnas <- convertChrNames(mirnas, "Ensembl")
+mcols(mirnas)$class <- "miRNA"
+features <- c(halves, frags, mirnas)
+```
+
+Reads for TCGA miRNA tend to be between 20-30 bp. If the overlap between a locus and a pair of reads is greater than or equal to 5 bp, we consider it one transcript spanning the feature. The following function is similar to the above, and returns a matrix with rows as features and columns as the sample. We don't need to divide the counts by feature length because miRNA sequencing is typically not fragmented prior to sequencing. 
+
+```{r hg19-counts-function}
+hg19FeatureCountsFromBam <- function(bamfiles, features, dir=".") {
+  currentwd <- getwd()
+  setwd(dir)
+  samples <- GAlignmentsList(sapply(bamfiles, function(file) readGAlignments(file)))
+  samples <- convertChrNames(samples, 'Ensembl')
+  setwd(currentwd)
+  sapply(samples, function(galignments) countOverlaps(features, galignments, minoverlap=5))
+}
+```
+
+```{r hg19-counts}
+hg19_feature_nt_counts <- hg19FeatureCountsFromBam(subset(prad_metadata, sample_type == "NT")$hg19_mapped, features, '/inside/grotto/blin/trna-markers/mirna/prad')
+hg19_feature_tp_counts <- hg19FeatureCountsFromBam(subset(prad_metadata, sample_type == "TP")$hg19_mapped, features, '/inside/grotto/blin/trna-markers/mirna/prad')
+```
+
+### Data wrangling
+
+The code above generates data that needs to be formatted in a way that we can reference in later steps. We add feature names to `hg19_feature_counts` (this is not handled already unlike with tRNA counts) and convert the counts to data frames.
+
+```{r format-save, cache=FALSE}
+rownames(hg19_feature_tp_counts) <- mcols(features)$tx_name
+rownames(hg19_feature_nt_counts) <- mcols(features)$tx_name
+hg19_feature_tp_counts <- as.data.frame(hg19_feature_tp_counts)
+hg19_feature_nt_counts <- as.data.frame(hg19_feature_nt_counts)
+trna_tp_counts <- as.data.frame(trna_tp_counts)
+trna_nt_counts <- as.data.frame(trna_nt_counts)
+save(file="feature-counts.RData", hg19_feature_nt_counts, hg19_feature_tp_counts, trna_tp_counts, trna_nt_counts, features)
+```
+
+Next step: find correlations between miRNA and feature counts!
+
+```{r save-image, echo=FALSE, cache=FALSE}
+save.image('feature-counts-image.RData')
+```
+

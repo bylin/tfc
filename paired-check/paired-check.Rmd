@@ -1,0 +1,51 @@
+## Checking whether the reads are single end or paired end
+_Last modified `r Sys.Date()`. This document, R session image, knitr cache, figures, and other associated datasets are located in `cruncher:/inside/grotto/blin/trna-markers/paired-check/`._
+
+```{r setup, echo=FALSE, warning=FALSE, results=FALSE, message=FALSE, errors=FALSE}
+library(knitr)
+opts_chunk$set(cache=TRUE, cache.path="/inside/grotto/blin/trna-markers/paired-check/cache/", eval=TRUE, echo=TRUE, warning=FALSE, results=FALSE, message=FALSE, autodep=TRUE, dev="png", dpi=300)
+```
+
+Although the flags for paired end reads are on (bit 0x1 is high), there is little evidence to show for the existence of paired ends.
+
+### Failure to import properly with `GenomicAlignments`
+
+First, this is what a standard import with a properly formatted BAM file with paired ends should look like. This is taken directly from the [example](http://www.bioconductor.org/packages/release/bioc/vignettes/GenomicRanges/inst/doc/GenomicRangesHOWTOs.pdf).
+
+```{r standard}
+library(GenomicAlignments)
+library(GenomicRanges)
+library(pasillaBamSubset)
+un3 <- untreated3_chr4()
+gapairs <- readGAlignmentPairs(un3)
+gapairs
+```
+
+Now, if we try to do the same thing for a miRNA file, we don't get this, regardless of whether we use a `GAlignmentsList` or `GAlignmentsPairs`.
+
+```{r tcga-failure}
+
+```
+
+This code failed to detect paired end reads. This shows that the BAM file is formatted incorrectly. In addition, the program `bam2fastq` produces 3 files: `prefix_1`, `prefix_2`, and `prefix_M`. The files marked `1` and `2` are paired end reads. The program consistently produces `1` and `2` files of size 0.
+
+### Looking at the read flags with `samtools`
+
+It still may be possible that the data exists. Paired end sequences must have an identical first field (QNAME). A quick `grep` reveals that only one read exists with this mapping (data not shown). Finally, we know that sometimes "duplicate" files exist on CGHub. These duplicated files are different sizes and may correspond to the paired end files.
+
+Let's take the PRAD miRNA data for one person with duplicated data, and filter it for just reads satisfying the 0x1 flag.
+
+```{r setup-flags, engine='bash'}
+samtools view -F 0x1 -h TCGA-HC-8260-01A-11R-2262-13_mirna-1.bam | samtools view -S -u - | samtools sort - 1
+samtools view -F 0x1 -h TCGA-HC-8260-01A-11R-2262-13_mirna-2.bam | samtools view -S -u - | samtools sort - 2
+samtools view 1.bam | head | cut -f 1
+```
+
+These sequences should have a corresponding read in the other file, `2.bam`. 
+
+```{r check-2-bam, engine='bash'}
+samtools view 1.bam | grep "HS4_248:3:1306:9250:187792"
+samtools view 2.bam | grep "HS4_248:3:1306:9250:187792"
+```
+
+Unfortunately, it seems as though these two runs have absolutely nothing to do with each other.

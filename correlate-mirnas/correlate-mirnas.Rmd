@@ -1,0 +1,112 @@
+## correlate-mirnas
+_Last modified `r format(Sys.time(), "%I:%M %p on %b %d, %Y")`. This document, R session image, knitr cache, figures, and other associated datasets are located in `cruncher:/inside/grotto/blin/trna-markers/correlate-mirnas/`._
+
+```{r setup, echo=FALSE, warning=FALSE, results=FALSE, message=FALSE, errors=FALSE, cache=FALSE}
+library(knitr)
+opts_chunk$set(cache=TRUE, cache.path="/inside/grotto/blin/trna-markers/correlate-mirnas/cache/", eval=TRUE, echo=TRUE, warning=FALSE, results=FALSE, message=FALSE, autodep=TRUE, dev="png", dpi=300)
+```
+
+```{r libraries, cache=FALSE}
+library(DESeq2)
+library(BiocParallel)
+library(reshape2)
+library(ggplot2)
+library(stringr)
+register(MulticoreParam(8)) # turn this off depending on your machine!
+load('/inside/grotto/blin/trna-markers/feature-counts/feature-counts.RData')
+```
+
+From [feature-counts](../feature-counts/feature-counts.html), we have four count matrices: `hg19_feature_nt_counts`, `hg19_feature_tp_counts`, `trna_nt_counts`, and `trna_tp_counts`. We are interested in correlations for the hg19 feature counts, since that's where the tRF counts are. 
+
+### Normalize counts
+Let's load the `.RData` file and normalize the counts using `DESeq2`. For this first step, we will also eliminate features that have 0 counts for over 95% of the samples. This means that for a tRF to be considered in the analysis, at least 5% of the samples needs to exhibit expression. This corresponds to 10% of the tumor samples or 10% of the normal samples (or anything in between). A secondary filter for a minimum count is also applied. Here, the minimum is a normalized read count of 10.
+
+```{r get-scaling-factors}
+hg19_feature_counts <- cbind(hg19_feature_tp_counts, hg19_feature_nt_counts) 
+hg19_feature_counts <- hg19_feature_counts[apply(hg19_feature_counts, 1, function(row) length(which(row > 0)) > 5), ]
+hg19_feature_counts <- hg19_feature_counts[apply(hg19_feature_counts, 1, function(row) sum(row) > 10), ]
+num_pairs <- length(colnames(hg19_feature_counts))/2
+colData <- data.frame(row.names = colnames(hg19_feature_counts), condition = c(rep("tp", num_pairs), rep("nt", num_pairs)), type = "single-read")
+dds <- DESeqDataSetFromMatrix(countData = hg19_feature_counts, colData = colData, design = ~ condition)
+dds <- DESeq(dds)
+res <- results(dds)
+```
+
+We don't need to run the entire DESeq analysis pipeline. The only thing of interest is the scaling factors which we can now apply to our hg19 feature counts.
+
+```{r normalize}
+normalized_counts <- t(t(hg19_feature_counts) / sizeFactors(dds)) # R applies vectors on columns (genes), we want R to apply them on rows (samples) for size factors
+
+```
+
+We should confirm that the normalization did a good job by making an MA plot.
+
+```{r ma-plot}
+plotMA(res, main = "DESeq2", ylim = c(-2, 2))
+```
+
+### Correlation
+
+The correlation will be performed on a matrix of fold changes. I'm not sure whether I should take the log<sub>2</sub> fold change before then. I do in this case, to minimize heteroscedasticity - reduce the variability between sub-populations, which in this case is individual genes or groups of genes. Since these are `log2` values, and there are fragments with counts of 0, we will use Laplacian smoothing (add a pseudocount of 1) to avoid `-Inf` values.
+
+```{r fold-change}
+# NT normalized counts - TP normalized counts
+fold_changes <- log2(normalized_counts[, (num_pairs+1):(num_pairs*2)]+1) - log2(normalized_counts[, 1:num_pairs]+1)
+```
+
+I also have to choose between Pearson's r and Spearman's $\rho$. Apparently, Pearson's r has more power and finds linear (as opposed to monotonic) relationships, so I'll start with that.
+
+```{r pearson}
+correlations <- cor(t(fold_changes), method = "pearson") # function operates on columns, so need to get features onto columns.
+```
+
+```{r mir-correlations}
+mir_corr <- correlations[!str_detect(colnames(correlations), "hsa"), str_detect(colnames(correlations), "hsa")] # isolate for miRNAs
+mir_corr_df <- melt(mir_corr)
+colnames(mir_corr_df) <- c("Feature", "miRNA", "r")
+mir_corr_df <- mir_corr_df[order(mir_corr_df$r, decreasing = TRUE), ]
+#mirnas <- colnames(mir_corr)
+#mir_corr <- lapply(1:ncol(mir_corr), function(mirna_column) mir_corr[, mirna_column][order(mir_corr[, mirna_column], decreasing = TRUE)]) # sort correlation matrix. This line is convoluted because *apply removes row names upon return, and we need to preserve the row names (feature identifiers).
+#names(mir_corr) <- mirnas
+```
+
+```{r show-correlations}
+# sample 5 elements, then sample 5 rows with those elements
+plot_data <- mir_corr_df[which(mir_corr_df$Feature %in% sample(mir_corr_df$Feature, 5) & (mir_corr_df$r >= 0.25 | mir_corr_df$r <= -0.25)), ]
+#plot <- qplot(x = plot_data$Feature, y = plot_data$r, data = plot_data, geom = "point")
+plot <- qplot(data = plot_data, x = plot_data$Feature, y = plot_data$r, geom = "point") + theme(axis.text.x = element_text(angle = -45, hjust = 0))
+#plot <- ggplot() + geom_point(data = plot_data, aes(x = Feature, y = r)) + theme(axis.text.x = element_text(angle = -45, hjust = 0))#+ geom_line(data = plot_data, aes(x = Feature, y = r)) + geom_text(data = plot_data, aes(x = Feature, y = r, label = miRNA, hjust = 0.2, vjust = 0.2)) + 
+plot
+interactive_plot <- plotly()$ggplotly(plot)
+```
+
+<iframe src="`r interactive_plot$response$url`" width="750" height="600"></iframe>
+
+For this analysis, these are the most strongest negative and positive correlations with mir-hsa-31.
+
+
+### Selecting key miRNAs
+#### Differentially expressed miRNAs identified by Schaefer et al. (2009)
+Originally, I used the miRNAs derived from [this paper](http://dx.doi.org/10.1002/ijc.24827), which describes miRNAs dysregulated in prostate carcinoma. This list of miRNAs can be found at `/inside/grotto/blin/trna-markers/feature-counts/prad-mirnas-1.bed`. Four of these are upregulated, and the other five are downregulated.
+
+The problem with this set of miRNAs is that only `hsa-mir-31` survives the purge.
+
+#### Broad GDAC Firehose PRAD T stage miRNAs
+Later analyses showed that most of these miRNAs weren't expressed at a high enough level to be correlated with anything at all. Yikes. I'm going to try using [Broad Firehose](http://gdac.broadinstitute.org/runs/analyses__latest/reports/cancer/PRAD/Correlate_Clinical_vs_miRseq/nozzle.html) instead. There are 16 miRNAs negatively correlated with T stage. I don't know what "negatively correlated with lower stage" means in this context - will need to ask someone from Josh's lab to see what's going on. 
+
+Actually, there aren't 16 miRNAs. The very first one, [hsa-mir-3676](http://www.mirbase.org/cgi-bin/mirna_entry.pl?acc=MI0016077), is actually a tRF! I'll look into this later. There are 32 sequences associated from the remaining 15 miRNAs - mostly due to 5' and 3' miRNA fragments from the precursor sequence, but also due to +/- strand entries. These sequences are located at `/inside/grotto/blin/trna-markers/feature-counts/prad-mirnas-2.gff`.
+
+
+### Cluster
+
+We can also cluster the features by their fold changes in the 52 samples.
+
+```{r clusters}
+
+```
+
+```{r save-image, echo=FALSE, cache=FALSE}
+save.image('correlate-mirnas-image.RData')
+```
+
+
