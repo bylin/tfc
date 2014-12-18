@@ -15,7 +15,7 @@ attach('/inside/grotto/blin/trna-markers/feature-counts/feature-counts.RData')
 TCGA data almost certainly contains batch effects that need to be removed. I normalize the data and use the [`sva`](http://www.bioconductor.org/packages/release/bioc/html/sva.html) package to remove them.
 
 ### Normalize counts
-Let's load the `.RData` file and normalize the counts using `DESeq2`. For this first step, we will also eliminate features that have 0 counts for over 95% of the samples. This means that for a tRF to be considered in the analysis, at least 5% of the samples needs to exhibit expression. This corresponds to 10% of the tumor samples or 10% of the normal samples (or anything in between). A secondary filter for a minimum count is also applied. Here, the minimum is a normalized read count of 10.
+Let's load the `.RData` file and normalize the counts using `DESeq2`. For this first step, we will also eliminate features that have 0 counts for over 95% of the samples. This means that for a tRF to be considered in the analysis, at least 5% of the samples needs to exhibit expression. This corresponds to 10% of the tumor samples or 10% of the normal samples (or anything in between). A secondary filter for a minimum count is also applied. Here, the minimum is a normalized read count of 10. These filters are stricter than usual because reads can be mapped to multiple loci, so a sample with 10 mapped locations may really just be the same read mapped 10 times.
 
 ```{r get-scaling-factors}
 feature_counts <- feature_counts[apply(feature_counts, 1, function(row) length(which(row > 0)) > 5), ]
@@ -26,7 +26,7 @@ dds <- DESeqDataSetFromMatrix(countData = feature_counts, colData = colData, des
 dds <- DESeq(dds)
 ```
 
-We don't need to run the entire DESeq analysis pipeline. The only thing of interest is the scaling factors which we can now apply to our hg19 feature counts.
+We don't need the entire DESeq analysis pipeline. The only thing of interest is the scaling factors which we can now apply to our hg19 feature counts.
 
 ```{r normalize}
 normalized_counts <- t(t(feature_counts) / sizeFactors(dds)) # R applies vectors on columns (genes), we want R to apply them on rows (samples) for size factors
@@ -40,18 +40,48 @@ svobj <- sva(dat = normalized_counts,
              mod0 = model.matrix(~ 1, data = pheno_data))
 ```
 
+```{r remove-batch-function}
+# No idea how this works. Lifted off of https://www.biostars.org/p/121489/
+removeBatchEffect <- function(counts, mod, svs) {
+  x = cbind(mod, svs)
+  hat = solve(t(x) %*% x) %*% t(x)
+  beta = (hat %*% t(counts))
+  p = ncol(mod)
+  return(counts - t(as.matrix(x[,-c(1:p)]) %*% beta[-c(1:p),]))
+}
+```
+
+```{r remove-batch}
+counts <- removeBatchEffect(normalized_counts, mod, svobj)
+```
 
 ## PCA
 To look at the effectiveness of ComBat, I will project pre- and post-ComBat expression data onto its principle components.
 
 ```{r pca-function}
-
+plotPCA <- function(counts) {
+  pca <- prcomp(counts, scale = TRUE)
+  pca_scores <- as.data.frame(pca$x)
+  ggplot(pca_scores, aes(x = PC1, y = PC2)) + geom_point(shape=1)
+}
 ```
 
 ```{r pca}
+# first do primary tumors
+tp_before_pca_plot <- plotPCA(counts[, prad_metadata$cell_type == "TP"])
+tp_after_pca_plot <- plotPCA(counts[, prad_metadata$cell_type == "TP"])
+nt_before_pca_plot <- plotPCA(counts[, prad_metadata$cell_type == "NT"])
+nt_after_pca_plot <- plotPCA(counts[, prad_metadata$cell_type == "NT"])
+```
 
+```{r plot-pca, fig.pos = "h", fig.width = 5, fig.height = 4, fig.cap = "Before and after PCA plots"}
+tp_before_pca_plot
+tp_after_pca_plot
+nt_before_pca_plot
+nt_after_pca_plot
 ```
 
 ```{r save-image}
+save(file = "counts.RData", counts)
 save.image("batch-effects-image.RData")
 ```
