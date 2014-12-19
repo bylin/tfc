@@ -20,7 +20,18 @@ The correlation will be performed on a matrix of fold changes. I'm not sure whet
 
 ```{r fold-change}
 # NT normalized counts - TP normalized counts
-fold_changes <- log2(normalized_counts[, (num_pairs+1):(num_pairs*2)]+1) - log2(normalized_counts[, 1:num_pairs]+1)
+getFoldChanges <- function(metadata, counts) {
+	# first, get counts for matched samples
+	nt_matched_samples <- metadata[which(metadata$paired == TRUE && metadata$sample_type == "NT")]$barcode
+	tp_matched_samples <- metadata[which(metadata$paired == TRUE && metadata$sample_type == "TP")]$barcode
+	fold_changes <- counts[nt_matched_samples, ] - counts[tp_matched_samples, ]
+	# second, get counts for unmatched samples (no extra normal tissue samples, only extra primary tumor samples)
+	nt_samples <- metadata[which(metadata$sample_type == "NT"), ]$barcode # get normal tumor sample barcodes
+	nt_median <- apply(counts[nt_samples, ], 1, median) # get median counts for each feature
+	cbind(fold_changes, nt_median - counts[-nt_samples, ]) # subtract tumor counts from median nt counts to get the fold change
+}
+# TODO: add column (sample) names to fold changes object
+fold_changes <- getFoldChanges(prad_metadata, counts)
 ```
 
 I also have to choose between Pearson's r and Spearman's $\rho$. Apparently, Pearson's r has more power and finds linear (as opposed to monotonic) relationships, so I'll start with that.
