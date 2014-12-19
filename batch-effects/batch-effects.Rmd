@@ -68,10 +68,10 @@ plotPCA <- function(counts) {
 
 ```{r pca}
 # first do primary tumors
-tp_before_pca_plot <- plotPCA(counts[, prad_metadata$cell_type == "TP"])
-tp_after_pca_plot <- plotPCA(counts[, prad_metadata$cell_type == "TP"])
-nt_before_pca_plot <- plotPCA(counts[, prad_metadata$cell_type == "NT"])
-nt_after_pca_plot <- plotPCA(counts[, prad_metadata$cell_type == "NT"])
+tp_before_pca_plot <- plotPCA(counts[, prad_metadata$sample_type == "TP"])
+tp_after_pca_plot <- plotPCA(counts[, prad_metadata$sample_type == "TP"])
+nt_before_pca_plot <- plotPCA(counts[, prad_metadata$sample_type == "NT"])
+nt_after_pca_plot <- plotPCA(counts[, prad_metadata$sample_type == "NT"])
 ```
 
 ```{r plot-pca, fig.pos = "h", fig.width = 5, fig.height = 4, fig.cap = "Before and after PCA plots"}
