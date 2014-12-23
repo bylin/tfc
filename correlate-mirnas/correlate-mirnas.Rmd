@@ -7,11 +7,10 @@ opts_chunk$set(cache=TRUE, cache.path="/inside/grotto/blin/trna-markers/correlat
 ```
 
 ```{r libraries, cache=FALSE}
-library(DESeq2)
-library(BiocParallel)
 library(reshape2)
 library(ggplot2)
 library(stringr)
+library(BiocParallel)
 register(MulticoreParam(8)) # turn this off depending on your machine!
 load('/inside/grotto/blin/trna-markers/feature-counts/feature-counts.RData')
 ```
@@ -82,7 +81,9 @@ Actually, there aren't 16 miRNAs. The very first one, [hsa-mir-3676](http://www.
 We can also cluster the features by their fold changes in the 52 samples.
 
 ```{r clusters}
-
+distance_matrix <- as.matrix(dist(t(fold_changes))) # Euclidean
+clusters <- hclust(distance_matrix)
+heatmap.2(distance_matrix, Rowv = as.dendrogram(clusters), symm = TRUE, trace = "none")
 ```
 
 ```{r save-image, echo=FALSE, cache=FALSE}
