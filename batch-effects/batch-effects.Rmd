@@ -9,6 +9,7 @@ opts_chunk$set(cache=TRUE, cache.path="/inside/grotto/blin/trna-markers/batch-ef
 ```{r libraries, cache=FALSE}
 library(sva)
 library(GenomicRanges)
+library(DESeq2)
 library(ggplot2)
 library(BiocParallel)
 register(MulticoreParam(8)) # turn this off depending on your machine!
