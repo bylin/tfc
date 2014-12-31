@@ -61,12 +61,14 @@ Reads for TCGA miRNA tend to be between 20-30 bp. If the overlap between a locus
 
 ```{r count-function}
 countFeaturesFromBam <- function(bamfiles, features, dir = ".") {
-  currentwd <- getwd()
-  setwd(dir)
-  samples <- GAlignmentsList(sapply(bamfiles, function(file) readGAlignments(file)))
-  samples <- convertChrNames(samples, 'Ensembl')
-  setwd(currentwd)
-  sapply(samples, function(galignments) countOverlaps(features, galignments, minoverlap = 5))
+  bamfiles <- paste0(dir, "/", bamfiles)
+  counts <- vector()
+  # use a for loop because r will run out of memory
+  for (bamfile in bamfiles) {
+  	sample <- readGAlignments(bamfile)
+  	counts <- cbind(counts, countOverlaps(features, sample, minoverlap = 5))
+  }
+  counts
 }
 ```
 
@@ -79,7 +81,7 @@ rownames(feature_counts) <- mcols(features)$tx_name
 colnames(feature_counts) <- prad_metadata$barcode
 feature_counts <- as.data.frame(feature_counts)
 pheno_data <- AnnotatedDataFrame(data.frame(row.names = prad_metadata$barcode, sample_type = prad_metadata$sample_type))
-tRF_expression <- ExpressionSet(assayData = feature_counts, pheno_data = pheno_data)
+tRF_expression <- ExpressionSet(assayData = as.matrix(feature_counts), pheno_data = pheno_data) 
 ```
 
 This formats data a way that we can reference in later steps. We add feature names to `feature_counts` (this is not handled already) and convert to a data frame.
