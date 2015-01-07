@@ -80,8 +80,6 @@ pca$sample_type <- prad_metadata$sample_type
 ggplot(pca, aes(x = PC1, y = PC2, color = sample_type)) + geom_point(shape = 1) + ggtitle("After")
 ```
 
-This clusters by cancer incidence
-
 ```{r plot-pca-tp, fig.show = "hold", out.width = "400px", fig.width = 4, fig.height = 3, fig.cap = "Before and after PCA plots"}
 plotPCA(t(normalized_counts)[, prad_metadata$sample_type == "TP"]) + ggtitle("TP Before")
 plotPCA(t(counts)[, prad_metadata$sample_type == "TP"]) + ggtitle("TP After")
@@ -92,7 +90,9 @@ plotPCA(t(normalized_counts)[, prad_metadata$sample_type == "NT"]) + ggtitle("NT
 plotPCA(t(counts)[, prad_metadata$sample_type == "NT"]) + ggtitle("NT After")
 ```
 
+It doesn't look like removing surrogate variables is achieving a lot. I will just use the normalized counts instead.
+
 ```{r save-image}
-save(file = "counts.RData", counts)
+save(file = "counts.RData", counts, normalized_counts)
 save.image("batch-effects-image.RData")
 ```
