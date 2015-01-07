@@ -88,6 +88,7 @@ This formats data a way that we can reference in later steps. We add feature nam
 
 ```{r save-image, echo=FALSE, cache=FALSE}
 save(file="feature-counts.RData", tRF_expression, feature_counts, features, prad_metadata)
+save(file="features.RData", features)
 save.image('feature-counts-image.RData')
 ```
 
