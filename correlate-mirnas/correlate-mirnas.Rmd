@@ -10,9 +10,12 @@ opts_chunk$set(cache=TRUE, cache.path="/inside/grotto/blin/trna-markers/correlat
 library(reshape2)
 library(ggplot2)
 library(stringr)
+library(gplots)
 library(BiocParallel)
 register(MulticoreParam(8)) # turn this off depending on your machine!
-load('/inside/grotto/blin/trna-markers/feature-counts/feature-counts.RData')
+load('/inside/grotto/blin/trna-markers/batch-effects/counts.RData')
+load('/inside/grotto/blin/trna-markers/process-reads/prad-metadata.RData')
+load('/inside/grotto/blin/trna-markers/feature-counts/features.RData')
 ```
 
 The correlation will be performed on a matrix of fold changes. I'm not sure whether I should take the log<sub>2</sub> fold change before then. I do in this case, to minimize heteroscedasticity - reduce the variability between sub-populations, which in this case is individual genes or groups of genes. Since these are `log2` values, and there are fragments with counts of 0, we will use Laplacian smoothing (add a pseudocount of 1) to avoid `-Inf` values.
@@ -20,14 +23,15 @@ The correlation will be performed on a matrix of fold changes. I'm not sure whet
 ```{r fold-change}
 # NT normalized counts - TP normalized counts
 getFoldChanges <- function(metadata, counts) {
-	# first, get counts for matched samples
-	nt_matched_samples <- metadata[which(metadata$paired == TRUE && metadata$sample_type == "NT")]$barcode
-	tp_matched_samples <- metadata[which(metadata$paired == TRUE && metadata$sample_type == "TP")]$barcode
-	fold_changes <- counts[nt_matched_samples, ] - counts[tp_matched_samples, ]
-	# second, get counts for unmatched samples (no extra normal tissue samples, only extra primary tumor samples)
-	nt_samples <- metadata[which(metadata$sample_type == "NT"), ]$barcode # get normal tumor sample barcodes
-	nt_median <- apply(counts[nt_samples, ], 1, median) # get median counts for each feature
-	cbind(fold_changes, nt_median - counts[-nt_samples, ]) # subtract tumor counts from median nt counts to get the fold change
+  # first, get counts for matched samples
+  nt_matched_samples <- subset(metadata, paired == TRUE & sample_type == "NT")$barcode
+  tp_matched_samples <- subset(metadata, paired == TRUE & sample_type == "TP")$barcode
+  fold_changes <- counts[, nt_matched_samples] - counts[, tp_matched_samples]
+  # second, get counts for unmatched samples (no extra normal tissue samples, only extra primary tumor samples)
+  nt_samples <- subset(metadata, sample_type == "NT")$barcode # get normal tumor sample barcodes
+  nt_median <- apply(counts[, nt_samples], 1, median) # get median counts for each feature
+  tp_unmatched_samples <- which(metadata$sample_type == "TP" & metadata$paired == FALSE)
+  cbind(fold_changes, nt_median - counts[, tp_unmatched_samples]) # subtract tumor counts from median nt counts to get the fold change
 }
 # TODO: add column (sample) names to fold changes object
 fold_changes <- getFoldChanges(prad_metadata, counts)
@@ -39,27 +43,17 @@ I also have to choose between Pearson's r and Spearman's $\rho$. Apparently, Pea
 correlations <- cor(t(fold_changes), method = "pearson") # function operates on columns, so need to get features onto columns.
 ```
 
+Let's 
+
 ```{r mir-correlations}
 mir_corr <- correlations[!str_detect(colnames(correlations), "hsa"), str_detect(colnames(correlations), "hsa")] # isolate for miRNAs
-mir_corr_df <- melt(mir_corr)
-colnames(mir_corr_df) <- c("Feature", "miRNA", "r")
-mir_corr_df <- mir_corr_df[order(mir_corr_df$r, decreasing = TRUE), ]
-#mirnas <- colnames(mir_corr)
-#mir_corr <- lapply(1:ncol(mir_corr), function(mirna_column) mir_corr[, mirna_column][order(mir_corr[, mirna_column], decreasing = TRUE)]) # sort correlation matrix. This line is convoluted because *apply removes row names upon return, and we need to preserve the row names (feature identifiers).
-#names(mir_corr) <- mirnas
+mir_corr <- melt(mir_corr)
+colnames(mir_corr) <- c("Feature", "miRNA", "r")
+mir_corr <- mir_corr[order(mir_corr$r, decreasing = TRUE), ]
+mir_corr$Class <- mcols(features)$class[match(mir_corr_df$Feature, mcols(features)$tx_name)] # add classifications to correlation df
+head(mir_corr, 10)
+tail(mir_corr, 10)
 ```
-
-```{r show-correlations}
-# sample 5 elements, then sample 5 rows with those elements
-plot_data <- mir_corr_df[which(mir_corr_df$Feature %in% sample(mir_corr_df$Feature, 5) & (mir_corr_df$r >= 0.25 | mir_corr_df$r <= -0.25)), ]
-#plot <- qplot(x = plot_data$Feature, y = plot_data$r, data = plot_data, geom = "point")
-plot <- qplot(data = plot_data, x = plot_data$Feature, y = plot_data$r, geom = "point") + theme(axis.text.x = element_text(angle = -45, hjust = 0))
-#plot <- ggplot() + geom_point(data = plot_data, aes(x = Feature, y = r)) + theme(axis.text.x = element_text(angle = -45, hjust = 0))#+ geom_line(data = plot_data, aes(x = Feature, y = r)) + geom_text(data = plot_data, aes(x = Feature, y = r, label = miRNA, hjust = 0.2, vjust = 0.2)) + 
-plot
-interactive_plot <- plotly()$ggplotly(plot)
-```
-
-<iframe src="`r interactive_plot$response$url`" width="750" height="600"></iframe>
 
 For this analysis, these are the most strongest negative and positive correlations with mir-hsa-31.
 
@@ -78,7 +72,7 @@ Actually, there aren't 16 miRNAs. The very first one, [hsa-mir-3676](http://www.
 
 ### Cluster
 
-We can also cluster the features by their fold changes in the 52 samples.
+We can also cluster the features by their fold changes.
 
 ```{r clusters}
 distance_matrix <- as.matrix(dist(t(fold_changes))) # Euclidean
