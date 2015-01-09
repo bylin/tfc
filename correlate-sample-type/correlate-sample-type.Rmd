@@ -1,0 +1,39 @@
+## correlate-sample-type
+_Last modified `r format(Sys.time(), "%I:%M %p on %b %d, %Y")`. This document, R session image, knitr cache, figures, and other associated datasets are located in `cruncher:/inside/grotto/blin/trna-markers/correlate-sample-type/`._
+
+```{r setup, echo=FALSE, warning=FALSE, results=FALSE, message=FALSE, errors=FALSE, cache=FALSE}
+library(knitr)
+opts_chunk$set(cache = TRUE, cache.path = "/inside/grotto/blin/trna-markers/correlate-sample-type/cache/", eval = TRUE, echo = TRUE, warning = FALSE, results = FALSE, message = FALSE, autodep = TRUE, dev = "png", dpi = 300)
+```
+
+```{r libraries, cache=FALSE}
+library(reshape2)
+library(ggplot2)
+library(stringr)
+library(gplots)
+library(BiocParallel)
+register(MulticoreParam(8)) # turn this off depending on your machine
+load('/inside/grotto/blin/trna-markers/batch-effects/counts.RData')
+load('/inside/grotto/blin/trna-markers/correlate-mirnas/fold-changes.RData')
+load('/inside/grotto/blin/trna-markers/process-reads/prad-metadata.RData')
+```
+
+This is fairly similar to [correlate-mirnas](correlate-mirnas.html), but instead I am looking at tRF expression versus cell status (normal vs tumor). I can't use Pearson's _r_ in this case. Instead, I'll score each individual feature by proportion of samples with positive fold change, scaled by magnitude of fold change. 
+
+```{r fold-change-distribution}
+
+```
+
+
+```{r correlation}
+tRF_fold_changes <- t(fold_changes[which(!str_detect(rownames(fold_changes), "hsa")), ]) # isolate for only tRFs
+correlations <- cor(x = tRF_fold_changes, y = as.factor(prad_metadata$sample_type), formula = y ~ x, method = "pearson")
+```
+
+
+
+
+
+```{r save-image}
+save.image("correlate-sample-type-image.RData")
+```
