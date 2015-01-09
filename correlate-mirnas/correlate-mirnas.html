@@ -206,14 +206,14 @@ hr {
 <body>
 <h2>correlate-mirnas</h2>
 
-<p><em>Last modified 02:03 PM on Jan 06, 2015. This document, R session image, knitr cache, figures, and other associated datasets are located in <code>cruncher:/inside/grotto/blin/trna-markers/correlate-mirnas/</code>.</em></p>
+<p><em>Last modified 04:23 PM on Jan 07, 2015. This document, R session image, knitr cache, figures, and other associated datasets are located in <code>cruncher:/inside/grotto/blin/trna-markers/correlate-mirnas/</code>.</em></p>
 
 <pre><code class="r">library(reshape2)
 library(ggplot2)
 library(stringr)
 library(gplots)
 library(BiocParallel)
-register(MulticoreParam(8)) # turn this off depending on your machine!
+register(MulticoreParam(8)) # turn this off depending on your machine
 load(&#39;/inside/grotto/blin/trna-markers/batch-effects/counts.RData&#39;)
 load(&#39;/inside/grotto/blin/trna-markers/process-reads/prad-metadata.RData&#39;)
 load(&#39;/inside/grotto/blin/trna-markers/feature-counts/features.RData&#39;)
@@ -234,7 +234,7 @@ getFoldChanges &lt;- function(metadata, counts) {
   cbind(fold_changes, nt_median - counts[, tp_unmatched_samples]) # subtract tumor counts from median nt counts to get the fold change
 }
 # TODO: add column (sample) names to fold changes object
-fold_changes &lt;- getFoldChanges(prad_metadata, counts)
+fold_changes &lt;- getFoldChanges(prad_metadata, normalized_counts)
 </code></pre>
 
 <p>I also have to choose between Pearson&#39;s r and Spearman&#39;s \(\rho\). Apparently, Pearson&#39;s r has more power and finds linear (as opposed to monotonic) relationships, so I&#39;ll start with that.</p>
@@ -249,36 +249,41 @@ mir_corr &lt;- melt(mir_corr)
 colnames(mir_corr) &lt;- c(&quot;Feature&quot;, &quot;miRNA&quot;, &quot;r&quot;)
 mir_corr &lt;- mir_corr[order(mir_corr$r, decreasing = TRUE), ]
 mir_corr$Class &lt;- mcols(features)$class[match(mir_corr_df$Feature, mcols(features)$tx_name)] # add classifications to correlation df
-head(mir_corr, 10)
 </code></pre>
 
-<pre><code>##                                Feature         miRNA         r   Class
-## 362118     chrM.tRNA2-ValTAC_threehalf hsa-mir-101-2 0.9103398   3half
-## 361309       tRNA-His-GTG-1-1_fivehalf hsa-mir-101-2 0.8907614   5half
-## 361317       tRNA-His-GTG-1-4_fivehalf hsa-mir-101-2 0.8801836   5half
-## 361323       tRNA-His-GTG-1-6_fivehalf hsa-mir-101-2 0.8786682   5half
-## 361320       tRNA-His-GTG-1-5_fivehalf hsa-mir-101-2 0.8751659   5half
-## 160444       tRNA-Arg-TCT-4-1_fivehalf  hsa-mir-6718 0.7501562   5half
-## 113712 chr5.numttRNA6-AspGTC_threehalf  hsa-mir-4505 0.6959451   3half
-## 113567   chr8.numttRNA2-ThrTGT_trailer  hsa-mir-4505 0.6654363 trailer
-## 162225  chr7.numttRNA14-CysGCA_trailer  hsa-mir-6718 0.6495251 trailer
-## 162330 chr7.numttRNA4-AsnGTT_threehalf  hsa-mir-6718 0.6495251   3half
+<pre><code>## Error in eval(expr, envir, enclos): could not find function &quot;mcols&quot;
+</code></pre>
+
+<pre><code class="r">head(mir_corr, 10)
+</code></pre>
+
+<pre><code>##                                 Feature         miRNA         r
+## 62791         tRNA-Arg-TCT-4-1_fivehalf  hsa-mir-6718 0.7472128
+## 17000        tRNA-Gln-TTG-3-1_threehalf  hsa-mir-4294 0.7129454
+## 18338  chr6.numttRNA14-GlnTTG_threehalf  hsa-mir-4294 0.7129147
+## 17005        tRNA-Gln-TTG-3-3_threehalf  hsa-mir-4294 0.7047468
+## 18048  chr6.numttRNA13-GlnTTG_threehalf  hsa-mir-4294 0.7047404
+## 153010        tRNA-His-GTG-1-8_fivehalf hsa-mir-101-2 0.6984400
+## 48327   chr5.numttRNA6-AspGTC_threehalf  hsa-mir-4505 0.6959277
+## 48222     chr8.numttRNA2-ThrTGT_trailer  hsa-mir-4505 0.6768582
+## 17002        tRNA-Gln-TTG-3-2_threehalf  hsa-mir-4294 0.6767908
+## 64275    chr7.numttRNA14-CysGCA_trailer  hsa-mir-6718 0.6568405
 </code></pre>
 
 <pre><code class="r">tail(mir_corr, 10)
 </code></pre>
 
-<pre><code>##                                Feature         miRNA          r Class
-## 362086    chrM.tRNA17-TyrGTA_threehalf hsa-mir-101-2 -0.5849012 3half
-## 362120      chrM.tRNA9-GlyTCC_fivehalf hsa-mir-101-2 -0.6016293 5half
-## 362089     chrM.tRNA8-LysTTT_threehalf hsa-mir-101-2 -0.6157968 3half
-## 362593 chr5.numttRNA6-GluTTC_threehalf hsa-mir-101-2 -0.6331445 3half
-## 362121     chrM.tRNA9-GlyTCC_threehalf hsa-mir-101-2 -0.6332485 3half
-## 362124    chrM.tRNA15-GluTTC_threehalf hsa-mir-101-2 -0.6334969 3half
-## 362079     chrM.tRNA18-CysGCA_fivehalf hsa-mir-101-2 -0.6420307 5half
-## 362088      chrM.tRNA8-LysTTT_fivehalf hsa-mir-101-2 -0.6815075 5half
-## 362074    chrM.tRNA14-ProTGG_threehalf hsa-mir-101-2 -0.7663405 3half
-## 361332       tRNA-His-GTG-1-9_fivehalf hsa-mir-101-2 -0.9199768 5half
+<pre><code>##                              Feature        miRNA          r
+## 60352     tRNA-Ala-AGC-6-1_threehalf hsa-mir-5010 -0.3469308
+## 60610     tRNA-Asp-GTC-7-1_threehalf hsa-mir-5010 -0.3490210
+## 47747      tRNA-iMet-CAT-1-2_trailer hsa-mir-4505 -0.3496288
+## 60781     tRNA-Glu-CTC-9-1_threehalf hsa-mir-5010 -0.3496598
+## 46536       tRNA-Ala-AGC-4-1_trailer hsa-mir-4505 -0.3528099
+## 47173       tRNA-Ile-TAT-2-1_trailer hsa-mir-4505 -0.3534715
+## 61772 chr17.numttRNA1-ThrTGT_trailer hsa-mir-5010 -0.3549946
+## 63163     tRNA-Gly-GCC-2-2_threehalf hsa-mir-6718 -0.3688662
+## 61225      tRNA-Pro-AGG-2-1_fivehalf hsa-mir-5010 -0.4172380
+## 61068       tRNA-Leu-TAA-4-1_trailer hsa-mir-5010 -0.4229768
 </code></pre>
 
 <p>For this analysis, these are the most strongest negative and positive correlations with mir-hsa-31.</p>
@@ -311,7 +316,7 @@ clusters &lt;- hclust(distance_matrix)
 <pre><code class="r">heatmap.2(distance_matrix, Rowv = as.dendrogram(clusters), symm = TRUE, trace = &quot;none&quot;)
 </code></pre>
 
-<pre><code>## Error in eval(expr, envir, enclos): could not find function &quot;heatmap.2&quot;
+<pre><code>## Error in as.dendrogram(clusters): object &#39;clusters&#39; not found
 </code></pre>
 
 </body>

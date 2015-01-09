@@ -12,7 +12,7 @@ library(ggplot2)
 library(stringr)
 library(gplots)
 library(BiocParallel)
-register(MulticoreParam(8)) # turn this off depending on your machine!
+register(MulticoreParam(8)) # turn this off depending on your machine
 load('/inside/grotto/blin/trna-markers/batch-effects/counts.RData')
 load('/inside/grotto/blin/trna-markers/process-reads/prad-metadata.RData')
 load('/inside/grotto/blin/trna-markers/feature-counts/features.RData')
@@ -34,7 +34,7 @@ getFoldChanges <- function(metadata, counts) {
   cbind(fold_changes, nt_median - counts[, tp_unmatched_samples]) # subtract tumor counts from median nt counts to get the fold change
 }
 # TODO: add column (sample) names to fold changes object
-fold_changes <- getFoldChanges(prad_metadata, counts)
+fold_changes <- getFoldChanges(prad_metadata, normalized_counts)
 ```
 
 I also have to choose between Pearson's r and Spearman's $\rho$. Apparently, Pearson's r has more power and finds linear (as opposed to monotonic) relationships, so I'll start with that.
@@ -81,6 +81,7 @@ heatmap.2(distance_matrix, Rowv = as.dendrogram(clusters), symm = TRUE, trace = 
 ```
 
 ```{r save-image, echo=FALSE, cache=FALSE}
+save(file = 'fold-changes.RData', fold_changes)
 save.image('correlate-mirnas-image.RData')
 ```
 
