@@ -89,7 +89,7 @@ for prefix in `ls *-TP.bam *-NT.bam | cut -f 1 -d .`; do
   then
     if [ ! -e $prefix.fastq ]
     then
-      bam2fastq --force -o $prefix# $prefix.bam
+      bam2fastq --force -o $prefix
       mv ${prefix}_M $prefix.fastq
       rm ${prefix}_1 ${prefix}_2
     fi
