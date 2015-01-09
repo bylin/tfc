@@ -16,16 +16,18 @@ register(MulticoreParam(8)) # turn this off depending on your machine!
 attach('/inside/grotto/blin/trna-markers/feature-counts/feature-counts.RData')
 ```
 
-TCGA data almost certainly contains batch effects that need to be removed. I normalize the data and use the [`sva`](http://www.bioconductor.org/packages/release/bioc/html/sva.html) package to remove them.
+TCGA data may contain batch effects that need to be removed. I normalize the data with [`DESeq2`](http://www.bioconductor.org/packages/release/bioc/html/DESeq2.html) and use the [`sva`](http://www.bioconductor.org/packages/release/bioc/html/sva.html) package to remove them.
 
 ### Normalize counts
-Let's load the `.RData` file and normalize the counts using `DESeq2`. For this first step, we will also eliminate features that have 0 counts for over 95% of the samples. This means that for a tRF to be considered in the analysis, at least 5% of the samples needs to exhibit expression. This corresponds to 10% of the tumor samples or 10% of the normal samples (or anything in between). A secondary filter for a minimum count is also applied. Here, the minimum is a normalized read count of 10. These filters are stricter than usual because reads can be mapped to multiple loci, so a sample with 10 mapped locations may really just be the same read mapped 10 times.
+Let's load the `.RData` file and normalize the counts using `DESeq2`. For this first step, we will also eliminate features that have 0 counts for over 95% of the samples. This means that for a tRF or miRNA to be considered in the analysis, the feature must have at least 20 reads and be expressed in at least 5% of samples. These filters are stricter than usual because reads can be mapped to multiple loci, so a sample with 10 mapped locations may really just be the same read mapped 10 times.
+
+```{r filter}
+feature_counts <- feature_counts[apply(feature_counts, 1, function(row) length(which(row > 0)) > length(colnames(feature_counts)) * 0.05), ] # no. of samples with reads mapping to this feature > no. samples * 0.05
+feature_counts <- feature_counts[apply(feature_counts, 1, function(row) sum(row) > 20), ]
+```
 
 ```{r get-scaling-factors}
-feature_counts <- feature_counts[apply(feature_counts, 1, function(row) length(which(row > 0)) > 5), ]
-feature_counts <- feature_counts[apply(feature_counts, 1, function(row) sum(row) > 10), ]
-num_pairs <- length(colnames(feature_counts))/2
-colData <- data.frame(row.names = colnames(feature_counts), condition = c(rep("tp", num_pairs), rep("nt", num_pairs)), type = "single-read")
+colData <- data.frame(row.names = colnames(feature_counts), condition = prad_metadata$sample_type, type = "single-read") # feature count column names correspond to metadata rows
 dds <- DESeqDataSetFromMatrix(countData = feature_counts, colData = colData, design = ~ condition)
 dds <- DESeq(dds)
 ```
