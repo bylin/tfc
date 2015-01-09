@@ -1,0 +1,167 @@
+## more-cancers
+_Last modified `r format(Sys.time(), "%I:%M %p on %b %d, %Y")`. This document, R session image, knitr cache, figures, and other associated datasets are located in `cruncher:/inside/grotto/blin/trna-markers/more-cancers/`._
+
+```{r setup, echo=FALSE, warning=FALSE, results=FALSE, message=FALSE, errors=FALSE, cache=FALSE}
+library(knitr)
+opts_chunk$set(cache = TRUE, cache.path = "/inside/grotto/blin/trna-markers/more-cancers/cache/", eval = TRUE, echo = TRUE, warning = FALSE, results = FALSE, message = FALSE, autodep = TRUE, dev = "png", dpi = 300)
+```
+
+```{r libraries, cache=FALSE}
+library(stringr)
+library(DESeq2)
+source('/inside/grotto/blin/programs/convertChrNames.R')
+load('/inside/grotto/blin/trna-markers/feature-counts/features.RData')
+```
+
+We are expanding our analysis to lung adenocarcinoma (LUAD) and breast invasive carcinoma (BRCA), two of the most common cancers.
+
+
+```{r parse-metadata-function}
+# metadata_file: sample metadata downloaded from CGHub in tab delimited form
+# cancer_code: short abbreviation in lowercase describing the cancer type, e.g. "prad" or "luad"
+parseMetadata <- function(metadata_file, cancer_code) {
+  metadata <- read.table(metadata_file, header = TRUE, sep = '\t', as.is = TRUE)
+  metadata <- metadata[, c('barcode', 'sample_type', 'filename', 'analysis_id', 'uploaded', 'participant_id')]
+  # convert character "uploaded" column to date object for easier comparison
+  metadata$uploaded <- strptime(gsub("/", "-", metadata$uploaded), "%Y-%m-%d")
+  # start by getting matched pairs
+  # all NT datasets have at least one TP dataset from the same patient (participant). We can filter out datasets by existence of the NT file, then grab the most recent TP and NT datasets for each patient.
+  paired <- subset(metadata, participant_id %in% subset(metadata, sample_type == "NT")$participant_id & participant_id %in% subset(metadata, sample_type == "TP")$participant_id)
+  paired$paired <- TRUE # remember which samples are matched tumor/normal
+  parsed_metadata <- data.frame()
+  for (current_id in unique(paired$participant_id)) {
+    nt <- subset(paired, participant_id == current_id & sample_type == "NT")
+    tp <- subset(paired, participant_id == current_id & sample_type == "TP")
+    parsed_metadata <- rbind(parsed_metadata, tp[which(tp$uploaded == max(tp$uploaded)), ], nt[which(nt$uploaded == max(nt$uploaded)), ])
+  }
+  # now for the unpaired samples
+  singles <- metadata[-which(metadata$participant_id %in% parsed_metadata$participant_id), ]
+  singles$paired <- FALSE
+  for (current_id in unique(singles$participant_id)) {
+    ps <- subset(singles, participant_id == current_id) # get all samples for this participant
+    parsed_metadata <- rbind(parsed_metadata, ps[which(ps$uploaded == max(ps$uploaded)), ])
+  }
+  # create participant ID numbers and new filenames
+  numbering <- match(parsed_metadata$participant_id, unique(parsed_metadata$participant_id))
+  parsed_metadata$shortids <- numbering
+  numbering <- formatC(numbering, flag = "0", digits = 3)
+  parsed_metadata$shortnames <- paste0(cancer_code, "-", numbering, "-", parsed_metadata$sample_type, ".bam")
+  # reencode upload date as a string - it's encoded as a time object, screwing up data frame operations
+  parsed_metadata$uploaded <- as.character(parsed_metadata$uploaded)
+  parsed_metadata
+}
+```
+
+```{r parse-metadata}
+luad_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/more-cancers/luad-summary.tab', 'luad')
+brca_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/more-cancers/brca-summary.tab', 'brca')
+```
+
+```{r download-files}
+metadatas <- list(luad = luad_metadata, brca = brca_metadata)
+currentwd <- getwd()
+setwd('/inside/grotto/blin/trna-markers/datasets/raw')
+lapply(names(metadatas), function(cancer_code) {
+  metadata <- metadatas[[cancer_code]]
+  sapply(metadata$analysis_id, function(analysis_id) {
+    system(paste0('gtdownload -c $CGKEY -d ', analysis_id))
+  })
+  file.symlink(paste0(getwd(), metadata$analysis_id, '.bam'), paste0('/inside/grotto/blin/trna-markers/datasets/', cancer_code, '/', metadata$shortnames))
+})
+setwd(currentwd)
+```
+
+```{r remap, engine='bash'}
+remap() {
+  currentwd=`pwd` 
+  cd $1
+  for prefix in `ls *-TP.bam *-NT.bam | cut -f 1 -d .`; do
+    if [ ! -e $prefix-mapped.bam ]
+    then
+      if [ ! -e $prefix.fastq ]
+      then
+        bam2fastq --force -o $prefix
+        mv ${prefix}_M $prefix.fastq
+        rm ${prefix}_1 ${prefix}_2
+      fi
+      bowtie2 -x ~/grotto/data/hg19 -k 100 -U ${prefix}.fastq -S $prefix-mapped-1.sam
+      samtools view -S -F 4 -h -u $prefix-mapped-1.sam | samtools view -F 512 -h  - > $prefix-mapped-2.sam
+      bowtie2-best-mapped.py $prefix-mapped-2.sam | samtools view -S -u - | samtools sort - $prefix-mapped # auto appends .bam
+    fi
+    rm $prefix.fastq
+    rm $prefix-mapped-1.sam
+    rm $prefix-mapped-2.sam
+  done
+  cd $currentwd
+}
+remap /inside/grotto/blin/trna-markers/datasets/luad
+remap /inside/grotto/blin/trna-markers/datasets/brca
+```
+
+```{r count-features}
+countFeaturesFromBam <- function(metadata, features, dir = ".") {
+  bamfiles <- paste0(dir, "/", metadata$shortnames)
+  counts <- vector()
+  # use a for loop because r will run out of memory
+  for (bamfile in bamfiles) {
+  	sample <- readGAlignments(bamfile)
+  	counts <- cbind(counts, countOverlaps(features, sample, minoverlap = 5))
+  }
+  rownames(counts) <- mcols(features)$tx_name
+  colnames(counts) <- metadata$barcode
+  as.data.frame(counts)
+}
+luad_raw_counts <- countFeaturesFromBam(luad_metadata, features, '/inside/grotto/blin/trna-markers/datasets/luad/')
+brca_raw_counts <- countFeaturesFromBam(brca_metadata, features, '/inside/grotto/blin/trna-markers/datasets/brca/')
+save(file = 'luad-counts.RData', luad_raw_counts)
+save(file = 'brca-counts.RData', brca_raw_counts)
+```
+
+```{r normalize-counts}
+normalizeCounts <- function(counts, metadata) {
+	counts <- counts[apply(counts, 1, function(row) length(which(row > 0)) > length(colnames(features_counts)) * 0.05), ]
+	counts <- counts[apply(counts, 1, function(row) sum(row) > 20), ]
+	col_data <- data.frame(row.names = colnames(counts), condition = metadata$sample_type, type = 'single-read')
+	dds <- DESeqDataSetFromMatrix(countData = counts, colData = col_data, design = ~ condition)
+	dds <- estimateSizeFactors(dds)
+	t(t(feature_counts) / sizeFactors(dds))
+}
+luad_normalized_counts <- normalizeCounts(luad_raw_counts, luad_metadata)
+brca_normalized_counts <- normalizeCounts(brca_raw_counts, brca_metadata)
+```
+
+```{r batch-effects}
+estimateRemoveBatchEffect <- function(counts, metadata) {
+	pheno_data <- data.frame(row.names = metadata$barcode, sample_type = metadata$sample_type)
+	mod <- model.matrix(~ as.factor(sample_type), data = pheno_data)
+	mod0 <- model.matrix(~ 1, data = pheno_data)
+	svobj <- sva(dat = counts, mod = mod, mod0 = mod0)
+	x <- cbind(mod, svobj$sv)
+	hat <- solve(t(x) %*% x) %*% t(x)
+	beta <- hat %*% t(counts)
+	p <- ncol(mod)
+	counts - t(as.matrix(x[, -c(1:p)]) %*% beta[-c(1:p), ])
+}
+luad_adjusted_counts <- estimateRemoveBatchEffect(luad_normalized_counts, luad_metadata)
+brca_adjusted_counts <- estimateRemoveBatchEffect(brca_normalized_counts, brca_metadata)
+```
+
+```{r pca, fig.show = "hold", out.width = "400px", fig.width = 4, fig.height = 3}
+plotPCA <- function(counts) {
+  pca <- prcomp(counts, scale = TRUE)
+  pca_scores <- as.data.frame(pca$x)
+  ggplot(pca_scores, aes(x = PC1, y = PC2)) + geom_point(shape = 1)
+}
+plotPCACancerType <- function(normalized_counts, adjusted_counts, metadata, cancer_code) {
+	plotPCA(t(normalized_counts)[, metadata$sample_type == "TP"]) + ggtitle(paste(cancer_code, "TP Before"))
+	plotPCA(t(adjusted_counts)[, metadata$sample_type == "TP"]) + ggtitle(paste(cancer_code, "TP After"))
+	plotPCA(t(normalized_counts)[, metadata$sample_type == "NT"]) + ggtitle(paste(cancer_code, "NT Before"))
+	plotPCA(t(adjusted_counts)[, metadata$sample_type == "NT"]) + ggtitle(paste(cancer_code, "NT After"))
+}
+```
+
+```{r save-image}
+save(file = 'luad-counts.RData', luad_raw_counts, luad_normalized_counts)
+save(file = 'brca-counts.RData', brca_raw_counts, brca_normalized_counts)
+save.image("more-cancers-image.RData")
+```
