@@ -29,7 +29,7 @@ feature_counts <- feature_counts[apply(feature_counts, 1, function(row) sum(row)
 ```{r get-scaling-factors}
 colData <- data.frame(row.names = colnames(feature_counts), condition = prad_metadata$sample_type, type = "single-read") # feature count column names correspond to metadata rows
 dds <- DESeqDataSetFromMatrix(countData = feature_counts, colData = colData, design = ~ condition)
-dds <- DESeq(dds)
+dds <- estimateSizeFactors(dds)
 ```
 
 We don't need the entire DESeq analysis pipeline. The only thing of interest is the scaling factors which we can now apply to our hg19 feature counts.
@@ -58,17 +58,23 @@ removeBatchEffect <- function(counts, mod, svs) {
 ```
 
 ```{r remove-batch}
-counts <- removeBatchEffect(normalized_counts, mod, svobj$sv)
+batch_removed_counts <- removeBatchEffect(normalized_counts, mod, svobj$sv)
 ```
 
 ## PCA
 To look at the effectiveness of ComBat, I will project pre- and post-ComBat expression data onto its principle components.
 
-```{r pca-function}
+```{r pca, fig.show = "hold", out.width = "400px", fig.width = 4, fig.height = 3}
 plotPCA <- function(counts) {
   pca <- prcomp(counts, scale = TRUE)
   pca_scores <- as.data.frame(pca$x)
   ggplot(pca_scores, aes(x = PC1, y = PC2)) + geom_point(shape = 1)
+}
+plotPCACancerType <- function(normalized_counts, adjusted_counts, metadata, cancer_code) {
+	plotPCA(t(normalized_counts)[, metadata$sample_type == "TP"]) + ggtitle(paste(cancer_code, "TP Before"))
+	plotPCA(t(adjusted_counts)[, metadata$sample_type == "TP"]) + ggtitle(paste(cancer_code, "TP After"))
+	plotPCA(t(normalized_counts)[, metadata$sample_type == "NT"]) + ggtitle(paste(cancer_code, "NT Before"))
+	plotPCA(t(adjusted_counts)[, metadata$sample_type == "NT"]) + ggtitle(paste(cancer_code, "NT After"))
 }
 ```
 
@@ -77,24 +83,14 @@ plotPCA <- function(counts) {
 pca <- as.data.frame(prcomp(t(normalized_counts), scale = TRUE)$x)
 pca$sample_type <- prad_metadata$sample_type
 ggplot(pca, aes(x = PC1, y = PC2, color = sample_type)) + geom_point(shape = 1) + ggtitle("Before")
-pca <- as.data.frame(prcomp(t(counts), scale = TRUE)$x)
+pca <- as.data.frame(prcomp(t(batch_removed_counts), scale = TRUE)$x)
 pca$sample_type <- prad_metadata$sample_type
 ggplot(pca, aes(x = PC1, y = PC2, color = sample_type)) + geom_point(shape = 1) + ggtitle("After")
-```
-
-```{r plot-pca-tp, fig.show = "hold", out.width = "400px", fig.width = 4, fig.height = 3, fig.cap = "Before and after PCA plots"}
-plotPCA(t(normalized_counts)[, prad_metadata$sample_type == "TP"]) + ggtitle("TP Before")
-plotPCA(t(counts)[, prad_metadata$sample_type == "TP"]) + ggtitle("TP After")
-```
-
-```{r plot-pca-nt, fig.show = "hold", out.width = "400px", fig.width = 4, fig.height = 3, fig.cap = "Before and after PCA plots"}
-plotPCA(t(normalized_counts)[, prad_metadata$sample_type == "NT"]) + ggtitle("NT Before")
-plotPCA(t(counts)[, prad_metadata$sample_type == "NT"]) + ggtitle("NT After")
 ```
 
 It doesn't look like removing surrogate variables is achieving a lot. I will just use the normalized counts instead.
 
 ```{r save-image}
-save(file = "counts.RData", counts, normalized_counts)
+save(file = "counts.RData", batch_removed_counts, normalized_counts)
 save.image("batch-effects-image.RData")
 ```
