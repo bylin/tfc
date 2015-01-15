@@ -206,17 +206,18 @@ hr {
 <body>
 <h2>correlate-mirnas</h2>
 
-<p><em>Last modified 04:23 PM on Jan 07, 2015. This document, R session image, knitr cache, figures, and other associated datasets are located in <code>cruncher:/inside/grotto/blin/trna-markers/correlate-mirnas/</code>.</em></p>
+<p><em>Last modified 03:37 PM on Jan 14, 2015. This document, R session image, knitr cache, figures, and other associated datasets are located in <code>cruncher:/inside/grotto/blin/trna-markers/correlate-mirnas/</code>.</em></p>
 
 <pre><code class="r">library(reshape2)
 library(ggplot2)
 library(stringr)
 library(gplots)
+library(GenomicRanges)
 library(BiocParallel)
 register(MulticoreParam(8)) # turn this off depending on your machine
-load(&#39;/inside/grotto/blin/trna-markers/batch-effects/counts.RData&#39;)
-load(&#39;/inside/grotto/blin/trna-markers/process-reads/prad-metadata.RData&#39;)
-load(&#39;/inside/grotto/blin/trna-markers/feature-counts/features.RData&#39;)
+attach(&#39;/inside/grotto/blin/trna-markers/batch-effects/counts.RData&#39;)
+attach(&#39;/inside/grotto/blin/trna-markers/process-reads/prad-metadata.RData&#39;)
+attach(&#39;/inside/grotto/blin/trna-markers/feature-counts/features.RData&#39;)
 </code></pre>
 
 <p>The correlation will be performed on a matrix of fold changes. I&#39;m not sure whether I should take the log<sub>2</sub> fold change before then. I do in this case, to minimize heteroscedasticity - reduce the variability between sub-populations, which in this case is individual genes or groups of genes. Since these are <code>log2</code> values, and there are fragments with counts of 0, we will use Laplacian smoothing (add a pseudocount of 1) to avoid <code>-Inf</code> values.</p>
@@ -242,48 +243,41 @@ fold_changes &lt;- getFoldChanges(prad_metadata, normalized_counts)
 <pre><code class="r">correlations &lt;- cor(t(fold_changes), method = &quot;pearson&quot;) # function operates on columns, so need to get features onto columns.
 </code></pre>
 
-<p>Let&#39;s </p>
-
 <pre><code class="r">mir_corr &lt;- correlations[!str_detect(colnames(correlations), &quot;hsa&quot;), str_detect(colnames(correlations), &quot;hsa&quot;)] # isolate for miRNAs
 mir_corr &lt;- melt(mir_corr)
 colnames(mir_corr) &lt;- c(&quot;Feature&quot;, &quot;miRNA&quot;, &quot;r&quot;)
 mir_corr &lt;- mir_corr[order(mir_corr$r, decreasing = TRUE), ]
-mir_corr$Class &lt;- mcols(features)$class[match(mir_corr_df$Feature, mcols(features)$tx_name)] # add classifications to correlation df
+mir_corr$Class &lt;- mcols(features)$class[match(mir_corr$Feature, mcols(features)$tx_name)] # add classifications to correlation data frame
+head(mir_corr, 10)
 </code></pre>
 
-<pre><code>## Error in eval(expr, envir, enclos): could not find function &quot;mcols&quot;
-</code></pre>
-
-<pre><code class="r">head(mir_corr, 10)
-</code></pre>
-
-<pre><code>##                                 Feature         miRNA         r
-## 62791         tRNA-Arg-TCT-4-1_fivehalf  hsa-mir-6718 0.7472128
-## 17000        tRNA-Gln-TTG-3-1_threehalf  hsa-mir-4294 0.7129454
-## 18338  chr6.numttRNA14-GlnTTG_threehalf  hsa-mir-4294 0.7129147
-## 17005        tRNA-Gln-TTG-3-3_threehalf  hsa-mir-4294 0.7047468
-## 18048  chr6.numttRNA13-GlnTTG_threehalf  hsa-mir-4294 0.7047404
-## 153010        tRNA-His-GTG-1-8_fivehalf hsa-mir-101-2 0.6984400
-## 48327   chr5.numttRNA6-AspGTC_threehalf  hsa-mir-4505 0.6959277
-## 48222     chr8.numttRNA2-ThrTGT_trailer  hsa-mir-4505 0.6768582
-## 17002        tRNA-Gln-TTG-3-2_threehalf  hsa-mir-4294 0.6767908
-## 64275    chr7.numttRNA14-CysGCA_trailer  hsa-mir-6718 0.6568405
+<pre><code>##                                 Feature         miRNA         r   Class
+## 62791         tRNA-Arg-TCT-4-1_fivehalf  hsa-mir-6718 0.7472128   5half
+## 17000        tRNA-Gln-TTG-3-1_threehalf  hsa-mir-4294 0.7129454   3half
+## 18338  chr6.numttRNA14-GlnTTG_threehalf  hsa-mir-4294 0.7129147   3half
+## 17005        tRNA-Gln-TTG-3-3_threehalf  hsa-mir-4294 0.7047468   3half
+## 18048  chr6.numttRNA13-GlnTTG_threehalf  hsa-mir-4294 0.7047404   3half
+## 153010        tRNA-His-GTG-1-8_fivehalf hsa-mir-101-2 0.6984400   5half
+## 48327   chr5.numttRNA6-AspGTC_threehalf  hsa-mir-4505 0.6959277   3half
+## 48222     chr8.numttRNA2-ThrTGT_trailer  hsa-mir-4505 0.6768582 trailer
+## 17002        tRNA-Gln-TTG-3-2_threehalf  hsa-mir-4294 0.6767908   3half
+## 64275    chr7.numttRNA14-CysGCA_trailer  hsa-mir-6718 0.6568405 trailer
 </code></pre>
 
 <pre><code class="r">tail(mir_corr, 10)
 </code></pre>
 
-<pre><code>##                              Feature        miRNA          r
-## 60352     tRNA-Ala-AGC-6-1_threehalf hsa-mir-5010 -0.3469308
-## 60610     tRNA-Asp-GTC-7-1_threehalf hsa-mir-5010 -0.3490210
-## 47747      tRNA-iMet-CAT-1-2_trailer hsa-mir-4505 -0.3496288
-## 60781     tRNA-Glu-CTC-9-1_threehalf hsa-mir-5010 -0.3496598
-## 46536       tRNA-Ala-AGC-4-1_trailer hsa-mir-4505 -0.3528099
-## 47173       tRNA-Ile-TAT-2-1_trailer hsa-mir-4505 -0.3534715
-## 61772 chr17.numttRNA1-ThrTGT_trailer hsa-mir-5010 -0.3549946
-## 63163     tRNA-Gly-GCC-2-2_threehalf hsa-mir-6718 -0.3688662
-## 61225      tRNA-Pro-AGG-2-1_fivehalf hsa-mir-5010 -0.4172380
-## 61068       tRNA-Leu-TAA-4-1_trailer hsa-mir-5010 -0.4229768
+<pre><code>##                              Feature        miRNA          r   Class
+## 60352     tRNA-Ala-AGC-6-1_threehalf hsa-mir-5010 -0.3469308   3half
+## 60610     tRNA-Asp-GTC-7-1_threehalf hsa-mir-5010 -0.3490210   3half
+## 47747      tRNA-iMet-CAT-1-2_trailer hsa-mir-4505 -0.3496288 trailer
+## 60781     tRNA-Glu-CTC-9-1_threehalf hsa-mir-5010 -0.3496598   3half
+## 46536       tRNA-Ala-AGC-4-1_trailer hsa-mir-4505 -0.3528099 trailer
+## 47173       tRNA-Ile-TAT-2-1_trailer hsa-mir-4505 -0.3534715 trailer
+## 61772 chr17.numttRNA1-ThrTGT_trailer hsa-mir-5010 -0.3549946 trailer
+## 63163     tRNA-Gly-GCC-2-2_threehalf hsa-mir-6718 -0.3688662   3half
+## 61225      tRNA-Pro-AGG-2-1_fivehalf hsa-mir-5010 -0.4172380   5half
+## 61068       tRNA-Leu-TAA-4-1_trailer hsa-mir-5010 -0.4229768 trailer
 </code></pre>
 
 <p>For this analysis, these are the most strongest negative and positive correlations with mir-hsa-31.</p>
@@ -301,6 +295,84 @@ mir_corr$Class &lt;- mcols(features)$class[match(mir_corr_df$Feature, mcols(feat
 <p>Later analyses showed that most of these miRNAs weren&#39;t expressed at a high enough level to be correlated with anything at all. Yikes. I&#39;m going to try using <a href="http://gdac.broadinstitute.org/runs/analyses__latest/reports/cancer/PRAD/Correlate_Clinical_vs_miRseq/nozzle.html">Broad Firehose</a> instead. There are 16 miRNAs negatively correlated with T stage. I don&#39;t know what &ldquo;negatively correlated with lower stage&rdquo; means in this context - will need to ask someone from Josh&#39;s lab to see what&#39;s going on. </p>
 
 <p>Actually, there aren&#39;t 16 miRNAs. The very first one, <a href="http://www.mirbase.org/cgi-bin/mirna_entry.pl?acc=MI0016077">hsa-mir-3676</a>, is actually a tRF! I&#39;ll look into this later. There are 32 sequences associated from the remaining 15 miRNAs - mostly due to 5&#39; and 3&#39; miRNA fragments from the precursor sequence, but also due to +/- strand entries. These sequences are located at <code>/inside/grotto/blin/trna-markers/feature-counts/prad-mirnas-2.gff</code>.</p>
+
+<h3>Student&#39;s t-test for individual features</h3>
+
+<p>A two-tailed t-test with unequal variance is appropriate for determining if a feature is differentially expressed in normal vs. tumor, a two class feature. This is exactly what Broad Firehose uses. I&#39;ll do three t-tests:
+1) a paired test with matched tumor-normal pairs - each pair is from the same individual
+2) a paired test with matched tumor-normal pairs and unpaired samples paired with the median of the other class. In this case, the TP unpaired samples will be paired with the median of the NT sample expression.
+3) an independent t-test with data simply separated into tumor and normal</p>
+
+<pre><code class="r">nt_paired_counts &lt;- normalized_counts[, subset(prad_metadata, paired == TRUE &amp; sample_type == &quot;NT&quot;)$barcode]
+tp_paired_counts &lt;- normalized_counts[, subset(prad_metadata, paired == TRUE &amp; sample_type == &quot;TP&quot;)$barcode]
+test_1_results &lt;- lapply(1:nrow(nt_paired_counts), function(index) t.test(nt_paired_counts[index, ], tp_paired_counts[index, ], paired = TRUE, var.equal = FALSE))
+bonferroni_corrected_pvalue &lt;- 0.05/nrow(nt_paired_counts)
+test_1_features &lt;- rownames(nt_paired_counts)[which(sapply(test_1_results, function(t_test) t_test$p.value &lt; bonferroni_corrected_pvalue))]
+</code></pre>
+
+<pre><code class="r">generatePairedTTestMatrices &lt;- function(metadata, counts) {
+    tp_median &lt;- apply(counts[, subset(metadata, sample_type == &quot;TP&quot;)$barcode], 1, median) # get TP median counts for each feature
+    nt_median &lt;- apply(counts[, subset(metadata, sample_type == &quot;NT&quot;)$barcode], 1, median) # get TP median counts for each feature
+    nt_unmatched_paired &lt;- counts[, subset(metadata, sample_type == &quot;NT&quot;)$barcode]
+    tp_unmatched_paired &lt;- counts[, subset(metadata, sample_type == &quot;TP&quot;)$barcode]
+    num_nt_unmatched &lt;- nrow(subset(metadata, paired == FALSE &amp; sample_type == &quot;NT&quot;))
+    num_tp_unmatched &lt;- nrow(subset(metadata, paired == FALSE &amp; sample_type == &quot;TP&quot;))
+    if (num_tp_unmatched &gt; 0) nt_unmatched_paired &lt;- cbind(nt_unmatched_paired,
+                                                           matrix(rep(nt_median, times = num_tp_unmatched), ncol = num_tp_unmatched))
+    if (num_nt_unmatched &gt; 0) tp_unmatched_paired &lt;- cbind(tp_unmatched_paired,
+                                                           matrix(rep(tp_median, times = num_nt_unmatched), ncol = num_nt_unmatched))
+    return(list(nt_unmatched_paired, tp_unmatched_paired))
+}
+t_test_matrices &lt;- generatePairedTTestMatrices(prad_metadata, normalized_counts)
+test_2_results &lt;- lapply(1:nrow(t_test_matrices[[1]]), function(index) t.test(t_test_matrices[[1]][index, ], t_test_matrices[[2]][index, ], paired = TRUE, var.equal = FALSE))
+test_2_features &lt;- rownames(normalized_counts)[which(sapply(test_2_results, function(t_test) t_test$p.value &lt; bonferroni_corrected_pvalue))]
+</code></pre>
+
+<pre><code class="r">test_3_results &lt;- lapply(1:nrow(normalized_counts), function(index) {
+    t_test_input &lt;- melt(normalized_counts[, subset(prad_metadata, sample_type == &quot;NT&quot;)$barcode][index, ])
+    t_test_input &lt;- data.frame(t_test_input, condition = &quot;NT&quot;)
+    t_test_input &lt;- rbind(t_test_input, data.frame(melt(normalized_counts[, subset(prad_metadata, sample_type == &quot;TP&quot;)$barcode][index, ]), condition = &quot;TP&quot;))
+    t.test(t_test_input, paired = FALSE, var.equal = FALSE, formula = value ~ condition)
+})
+</code></pre>
+
+<pre><code>## Error in if (stderr &lt; 10 * .Machine$double.eps * abs(mx)) stop(&quot;data are essentially constant&quot;): missing value where TRUE/FALSE needed
+</code></pre>
+
+<pre><code class="r">test_3_features &lt;- rownames(normalized_counts)[which(sapply(test_3_results, function(t_test) t_test$p.value &lt; bonferroni_corrected_pvalue))]
+</code></pre>
+
+<pre><code class="r">intersect(intersect(test_1_features, test_2_features), test_3_features)
+</code></pre>
+
+<pre><code>##  [1] &quot;chr1.trna54-LysTTT-3006a&quot;         &quot;chr1.trna54-LysTTT-3006b&quot;        
+##  [3] &quot;chr6.trna74-LeuCAA-3012a&quot;         &quot;chr6.trna74-LeuCAA-3012b&quot;        
+##  [5] &quot;chr1.trna19-GlnCTG-5021a&quot;         &quot;chr1.trna15-GlnCTG-5021a&quot;        
+##  [7] &quot;chr1.trna28-GlnCTG-5021a&quot;         &quot;chr1.trna19-GlnCTG-5021b&quot;        
+##  [9] &quot;chr1.trna15-GlnCTG-5021b&quot;         &quot;chr1.trna28-GlnCTG-5021b&quot;        
+## [11] &quot;tRNA-Asn-GTT-2-4_threehalf&quot;       &quot;tRNA-Asn-GTT-18-1_fivehalf&quot;      
+## [13] &quot;tRNA-Asp-GTC-7-1_fivehalf&quot;        &quot;tRNA-Cys-ACA-1-1_fivehalf&quot;       
+## [15] &quot;tRNA-Gln-CTG-3-1_fivehalf&quot;        &quot;tRNA-Gln-CTG-3-1_threehalf&quot;      
+## [17] &quot;tRNA-Gln-CTG-3-2_fivehalf&quot;        &quot;tRNA-Gln-CTG-4-1_fivehalf&quot;       
+## [19] &quot;tRNA-Gln-CTG-4-1_threehalf&quot;       &quot;tRNA-Gln-CTG-4-2_fivehalf&quot;       
+## [21] &quot;tRNA-Gln-CTG-4-2_threehalf&quot;       &quot;tRNA-Gln-CTG-6-1_fivehalf&quot;       
+## [23] &quot;tRNA-Gln-CTG-6-1_threehalf&quot;       &quot;tRNA-Gly-CCC-7-1_threehalf&quot;      
+## [25] &quot;tRNA-Gly-GCC-1-5_threehalf&quot;       &quot;tRNA-Gly-GCC-2-5_threehalf&quot;      
+## [27] &quot;tRNA-Gly-GCC-3-1_threehalf&quot;       &quot;tRNA-Gly-TCC-1-1_fivehalf&quot;       
+## [29] &quot;tRNA-Leu-CAG-1-1_threehalf&quot;       &quot;tRNA-Leu-CAG-1-2_threehalf&quot;      
+## [31] &quot;tRNA-Leu-CAG-1-3_threehalf&quot;       &quot;tRNA-Leu-CAG-1-4_threehalf&quot;      
+## [33] &quot;tRNA-Leu-CAG-1-5_threehalf&quot;       &quot;tRNA-Leu-CAG-1-6_threehalf&quot;      
+## [35] &quot;tRNA-Leu-CAG-1-7_threehalf&quot;       &quot;tRNA-Leu-CAG-2-1_threehalf&quot;      
+## [37] &quot;tRNA-Lys-TTT-3-1_threehalf&quot;       &quot;tRNA-Met-CAT-6-1_fivehalf&quot;       
+## [39] &quot;tRNA-Phe-GAA-1-3_trailer&quot;         &quot;tRNA-Ser-AGA-1-1_fivehalf&quot;       
+## [41] &quot;tRNA-Ser-AGA-2-1_fivehalf&quot;        &quot;tRNA-Ser-AGA-2-6_fivehalf&quot;       
+## [43] &quot;tRNA-Ser-AGA-4-1_fivehalf&quot;        &quot;tRNA-Ser-TGA-3-1_fivehalf&quot;       
+## [45] &quot;tRNA-Ser-TGA-4-1_fivehalf&quot;        &quot;tRNA-Thr-CGT-3-1_fivehalf&quot;       
+## [47] &quot;chr5.numttRNA2-CysGCA_fivehalf&quot;   &quot;chr9.numttRNA3-SerTGA_trailer&quot;   
+## [49] &quot;chr1.numttRNA7-SerTGA_threehalf&quot;  &quot;chr6.numttRNA15-GlnCTG_fivehalf&quot; 
+## [51] &quot;chr6.numttRNA15-GlnCTG_threehalf&quot; &quot;chr18.numttRNA4-GlnCTG_fivehalf&quot; 
+## [53] &quot;chr18.numttRNA4-GlnCTG_threehalf&quot; &quot;hsa-mir-873&quot;
+</code></pre>
 
 <h3>Cluster</h3>
 
