@@ -203,10 +203,12 @@ hr {
 <body>
 <h2>more-cancers</h2>
 
-<p><em>Last modified 09:41 PM on Jan 08, 2015. This document, R session image, knitr cache, figures, and other associated datasets are located in <code>cruncher:/inside/grotto/blin/trna-markers/more-cancers/</code>.</em></p>
+<p><em>Last modified 11:55 AM on Jan 14, 2015. This document, R session image, knitr cache, figures, and other associated datasets are located in <code>cruncher:/inside/grotto/blin/trna-markers/more-cancers/</code>.</em></p>
 
 <pre><code class="r">library(stringr)
+library(DESeq2)
 source(&#39;/inside/grotto/blin/programs/convertChrNames.R&#39;)
+load(&#39;/inside/grotto/blin/trna-markers/feature-counts/features.RData&#39;)
 </code></pre>
 
 <p>We are expanding our analysis to lung adenocarcinoma (LUAD) and breast invasive carcinoma (BRCA), two of the most common cancers.</p>
@@ -253,187 +255,21 @@ brca_metadata &lt;- parseMetadata(&#39;/inside/grotto/blin/trna-markers/more-can
 <pre><code class="r">metadatas &lt;- list(luad = luad_metadata, brca = brca_metadata)
 currentwd &lt;- getwd()
 setwd(&#39;/inside/grotto/blin/trna-markers/datasets/raw&#39;)
-lapply(names(metadatas), function(cancer_code) {
+for (cancer_code in names(metadatas)) { 
   metadata &lt;- metadatas[[cancer_code]]
-  sapply(metadatas$analysis_id, function(analysis_id) {
+  for (analysis_id in metadata$analysis_id) {
+    if (file.exists(analysis_id)) next # if exists, assume file was downloaded correctly and is not corrupted
     system(paste0(&#39;gtdownload -c $CGKEY -d &#39;, analysis_id))
-  })
-  file.symlink(paste0(getwd(), metadata$analysis_id, &#39;.bam&#39;), paste0(&#39;/inside/grotto/blin/trna-markers/datasets/&#39;, cancer_code, &#39;/&#39;, metadata$shortnames))
-})
-</code></pre>
-
-<pre><code>## [[1]]
-##   [1] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [12] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [23] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [34] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [45] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [56] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [67] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [78] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [89] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [100] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [111] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [122] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [133] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [144] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [155] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [166] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [177] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [188] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [199] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [210] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [221] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [232] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [243] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [254] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [265] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [276] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [287] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [298] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [309] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [320] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [331] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [342] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [353] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [364] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [375] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [386] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [397] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [408] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [419] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [430] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [441] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [452] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [463] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [474] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [485] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [496] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [507] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [518] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [529] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [540] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [551] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## 
-## [[2]]
-##    [1] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##   [12] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##   [23] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##   [34] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##   [45] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##   [56] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##   [67] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##   [78] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##   [89] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [100] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [111] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [122] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [133] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [144] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [155] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [166] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [177] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [188] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [199] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [210] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [221] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [232] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [243] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [254] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [265] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [276] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [287] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [298] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [309] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [320] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [331] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [342] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [353] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [364] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [375] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [386] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [397] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [408] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [419] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [430] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [441] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [452] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [463] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [474] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [485] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [496] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [507] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [518] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [529] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [540] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [551] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [562] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [573] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [584] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [595] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [606] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [617] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [628] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [639] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [650] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [661] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [672] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [683] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [694] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [705] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [716] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [727] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [738] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [749] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [760] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [771] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [782] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [793] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [804] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [815] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [826] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [837] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [848] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [859] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [870] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [881] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [892] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [903] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [914] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [925] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [936] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [947] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [958] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [969] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [980] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-##  [991] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [1002] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [1013] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [1024] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [1035] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [1046] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [1057] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [1068] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [1079] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [1090] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [1101] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [1112] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [1123] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [1134] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [1145] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [1156] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [1167] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [1178] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-## [1189] FALSE
-</code></pre>
-
-<pre><code class="r">setwd(currentwd)
+  }
+  file.symlink(paste0(getwd(), &#39;/&#39;, metadata$analysis_id, &#39;/&#39;, metadata$barcode, &#39;_mirna.bam&#39;), paste0(&#39;/inside/grotto/blin/trna-markers/datasets/&#39;, cancer_code, &#39;/&#39;, metadata$shortnames))
+}
+setwd(currentwd)
 </code></pre>
 
 <pre><code class="bash">remap() {
-  currentwd=`pwd` 
+  currentwd=`pwd`
   cd $1
-  for prefix in `ls *-TP.bam *-NT.bam | cut -f 1 -d .`; do
+  for prefix in `ls *-TP.bam *-NT.bam | cut -f 1 -d . | head`; do
     if [ ! -e $prefix-mapped.bam ]
     then
       if [ ! -e $prefix.fastq ]
@@ -456,10 +292,1300 @@ remap /inside/grotto/blin/trna-markers/datasets/luad
 remap /inside/grotto/blin/trna-markers/datasets/brca
 </code></pre>
 
-<pre><code>## ls: *-TP.bam: No such file or directory
-## ls: *-NT.bam: No such file or directory
-## ls: *-TP.bam: No such file or directory
-## ls: *-NT.bam: No such file or directory
+<pre><code>## bam2fastq v1.1.0 - extract sequences from a BAM file
+## 
+## Usage: bam2fastq [options] &lt;bam file&gt;
+## 
+## Options:
+##   -o FILENAME, --output FILENAME
+##        Specifies the name of the FASTQ file(s) that will be generated.  May
+##        contain the special characters % (replaced with the lane number) and
+##        # (replaced with _1 or _2 to distinguish PE reads, _M for unpaired reads).
+##        [Default: s_%#_sequence.txt]
+## 
+##   --pairs-to-stdout
+##        Write the paired reads to stdout 
+## 
+##   --all-to-stdout
+##        Write all reads to stdout, ignoring pairing
+## 
+##   -f, --force, --overwrite
+##        Create output files specified with --output, overwriting existing
+##        files if necessary [Default: exit program rather than overwrite files]
+## 
+##   --aligned
+##   --no-aligned
+##        Reads in the BAM that are aligned will (will not) be extracted.
+##        [Default: extract aligned reads]
+## 
+##   --unaligned
+##   --no-unaligned
+##        Reads in the BAM that are not aligned will (will not) be extracted.
+##        [Default: extract unaligned reads]
+## 
+##   --filtered
+##   --no-filtered
+##        Reads that are marked as failing QC checks will (will not) be extracted.
+##        [Default: extract filtered reads]
+## 
+##   -q, --quiet
+##        Suppress informational messages [Default: print messages]
+## 
+##   -s, --strict
+##        Keep bam2fastq&#39;s processing to a minimum, assuming that the BAM strictly       meets specifications. [Default: allow some errors in the BAM]
+## 
+## 
+## mv: cannot stat `luad-0001-NT_M&#39;: No such file or directory
+## rm: cannot remove `luad-0001-NT_1&#39;: No such file or directory
+## rm: cannot remove `luad-0001-NT_2&#39;: No such file or directory
+## Warning: Could not open read file &quot;luad-0001-NT.fastq&quot; for reading; skipping...
+## Error: No input read files were valid
+## (ERR): bowtie2-align exited with value 1
+## [main_samview] fail to open &quot;luad-0001-NT-mapped-1.sam&quot; for reading.
+## [bam_header_read] invalid BAM binary header (this is not a BAM file).
+## [main_samview] fail to read the header from &quot;-&quot;.
+## 1 0/0
+## 2 0/0
+## 3 0/0
+## [samopen] no @SQ lines in the header.
+## [sam_read1] missing header? Abort!
+## rm: cannot remove `luad-0001-NT.fastq&#39;: No such file or directory
+## rm: cannot remove `luad-0001-NT-mapped-1.sam&#39;: No such file or directory
+## bam2fastq v1.1.0 - extract sequences from a BAM file
+## 
+## Usage: bam2fastq [options] &lt;bam file&gt;
+## 
+## Options:
+##   -o FILENAME, --output FILENAME
+##        Specifies the name of the FASTQ file(s) that will be generated.  May
+##        contain the special characters % (replaced with the lane number) and
+##        # (replaced with _1 or _2 to distinguish PE reads, _M for unpaired reads).
+##        [Default: s_%#_sequence.txt]
+## 
+##   --pairs-to-stdout
+##        Write the paired reads to stdout 
+## 
+##   --all-to-stdout
+##        Write all reads to stdout, ignoring pairing
+## 
+##   -f, --force, --overwrite
+##        Create output files specified with --output, overwriting existing
+##        files if necessary [Default: exit program rather than overwrite files]
+## 
+##   --aligned
+##   --no-aligned
+##        Reads in the BAM that are aligned will (will not) be extracted.
+##        [Default: extract aligned reads]
+## 
+##   --unaligned
+##   --no-unaligned
+##        Reads in the BAM that are not aligned will (will not) be extracted.
+##        [Default: extract unaligned reads]
+## 
+##   --filtered
+##   --no-filtered
+##        Reads that are marked as failing QC checks will (will not) be extracted.
+##        [Default: extract filtered reads]
+## 
+##   -q, --quiet
+##        Suppress informational messages [Default: print messages]
+## 
+##   -s, --strict
+##        Keep bam2fastq&#39;s processing to a minimum, assuming that the BAM strictly       meets specifications. [Default: allow some errors in the BAM]
+## 
+## 
+## mv: cannot stat `luad-0001-TP_M&#39;: No such file or directory
+## rm: cannot remove `luad-0001-TP_1&#39;: No such file or directory
+## rm: cannot remove `luad-0001-TP_2&#39;: No such file or directory
+## Warning: Could not open read file &quot;luad-0001-TP.fastq&quot; for reading; skipping...
+## Error: No input read files were valid
+## (ERR): bowtie2-align exited with value 1
+## [main_samview] fail to open &quot;luad-0001-TP-mapped-1.sam&quot; for reading.
+## [bam_header_read] invalid BAM binary header (this is not a BAM file).
+## [main_samview] fail to read the header from &quot;-&quot;.
+## 1 0/0
+## 2 0/0
+## 3 0/0
+## [samopen] no @SQ lines in the header.
+## [sam_read1] missing header? Abort!
+## rm: cannot remove `luad-0001-TP.fastq&#39;: No such file or directory
+## rm: cannot remove `luad-0001-TP-mapped-1.sam&#39;: No such file or directory
+## bam2fastq v1.1.0 - extract sequences from a BAM file
+## 
+## Usage: bam2fastq [options] &lt;bam file&gt;
+## 
+## Options:
+##   -o FILENAME, --output FILENAME
+##        Specifies the name of the FASTQ file(s) that will be generated.  May
+##        contain the special characters % (replaced with the lane number) and
+##        # (replaced with _1 or _2 to distinguish PE reads, _M for unpaired reads).
+##        [Default: s_%#_sequence.txt]
+## 
+##   --pairs-to-stdout
+##        Write the paired reads to stdout 
+## 
+##   --all-to-stdout
+##        Write all reads to stdout, ignoring pairing
+## 
+##   -f, --force, --overwrite
+##        Create output files specified with --output, overwriting existing
+##        files if necessary [Default: exit program rather than overwrite files]
+## 
+##   --aligned
+##   --no-aligned
+##        Reads in the BAM that are aligned will (will not) be extracted.
+##        [Default: extract aligned reads]
+## 
+##   --unaligned
+##   --no-unaligned
+##        Reads in the BAM that are not aligned will (will not) be extracted.
+##        [Default: extract unaligned reads]
+## 
+##   --filtered
+##   --no-filtered
+##        Reads that are marked as failing QC checks will (will not) be extracted.
+##        [Default: extract filtered reads]
+## 
+##   -q, --quiet
+##        Suppress informational messages [Default: print messages]
+## 
+##   -s, --strict
+##        Keep bam2fastq&#39;s processing to a minimum, assuming that the BAM strictly       meets specifications. [Default: allow some errors in the BAM]
+## 
+## 
+## mv: cannot stat `luad-0002-NT_M&#39;: No such file or directory
+## rm: cannot remove `luad-0002-NT_1&#39;: No such file or directory
+## rm: cannot remove `luad-0002-NT_2&#39;: No such file or directory
+## Warning: Could not open read file &quot;luad-0002-NT.fastq&quot; for reading; skipping...
+## Error: No input read files were valid
+## (ERR): bowtie2-align exited with value 1
+## [main_samview] fail to open &quot;luad-0002-NT-mapped-1.sam&quot; for reading.
+## [bam_header_read] invalid BAM binary header (this is not a BAM file).
+## [main_samview] fail to read the header from &quot;-&quot;.
+## 1 0/0
+## 2 0/0
+## 3 0/0
+## [samopen] no @SQ lines in the header.
+## [sam_read1] missing header? Abort!
+## rm: cannot remove `luad-0002-NT.fastq&#39;: No such file or directory
+## rm: cannot remove `luad-0002-NT-mapped-1.sam&#39;: No such file or directory
+## bam2fastq v1.1.0 - extract sequences from a BAM file
+## 
+## Usage: bam2fastq [options] &lt;bam file&gt;
+## 
+## Options:
+##   -o FILENAME, --output FILENAME
+##        Specifies the name of the FASTQ file(s) that will be generated.  May
+##        contain the special characters % (replaced with the lane number) and
+##        # (replaced with _1 or _2 to distinguish PE reads, _M for unpaired reads).
+##        [Default: s_%#_sequence.txt]
+## 
+##   --pairs-to-stdout
+##        Write the paired reads to stdout 
+## 
+##   --all-to-stdout
+##        Write all reads to stdout, ignoring pairing
+## 
+##   -f, --force, --overwrite
+##        Create output files specified with --output, overwriting existing
+##        files if necessary [Default: exit program rather than overwrite files]
+## 
+##   --aligned
+##   --no-aligned
+##        Reads in the BAM that are aligned will (will not) be extracted.
+##        [Default: extract aligned reads]
+## 
+##   --unaligned
+##   --no-unaligned
+##        Reads in the BAM that are not aligned will (will not) be extracted.
+##        [Default: extract unaligned reads]
+## 
+##   --filtered
+##   --no-filtered
+##        Reads that are marked as failing QC checks will (will not) be extracted.
+##        [Default: extract filtered reads]
+## 
+##   -q, --quiet
+##        Suppress informational messages [Default: print messages]
+## 
+##   -s, --strict
+##        Keep bam2fastq&#39;s processing to a minimum, assuming that the BAM strictly       meets specifications. [Default: allow some errors in the BAM]
+## 
+## 
+## mv: cannot stat `luad-0002-TP_M&#39;: No such file or directory
+## rm: cannot remove `luad-0002-TP_1&#39;: No such file or directory
+## rm: cannot remove `luad-0002-TP_2&#39;: No such file or directory
+## Warning: Could not open read file &quot;luad-0002-TP.fastq&quot; for reading; skipping...
+## Error: No input read files were valid
+## (ERR): bowtie2-align exited with value 1
+## [main_samview] fail to open &quot;luad-0002-TP-mapped-1.sam&quot; for reading.
+## [bam_header_read] invalid BAM binary header (this is not a BAM file).
+## [main_samview] fail to read the header from &quot;-&quot;.
+## 1 0/0
+## 2 0/0
+## 3 0/0
+## [samopen] no @SQ lines in the header.
+## [sam_read1] missing header? Abort!
+## rm: cannot remove `luad-0002-TP.fastq&#39;: No such file or directory
+## rm: cannot remove `luad-0002-TP-mapped-1.sam&#39;: No such file or directory
+## bam2fastq v1.1.0 - extract sequences from a BAM file
+## 
+## Usage: bam2fastq [options] &lt;bam file&gt;
+## 
+## Options:
+##   -o FILENAME, --output FILENAME
+##        Specifies the name of the FASTQ file(s) that will be generated.  May
+##        contain the special characters % (replaced with the lane number) and
+##        # (replaced with _1 or _2 to distinguish PE reads, _M for unpaired reads).
+##        [Default: s_%#_sequence.txt]
+## 
+##   --pairs-to-stdout
+##        Write the paired reads to stdout 
+## 
+##   --all-to-stdout
+##        Write all reads to stdout, ignoring pairing
+## 
+##   -f, --force, --overwrite
+##        Create output files specified with --output, overwriting existing
+##        files if necessary [Default: exit program rather than overwrite files]
+## 
+##   --aligned
+##   --no-aligned
+##        Reads in the BAM that are aligned will (will not) be extracted.
+##        [Default: extract aligned reads]
+## 
+##   --unaligned
+##   --no-unaligned
+##        Reads in the BAM that are not aligned will (will not) be extracted.
+##        [Default: extract unaligned reads]
+## 
+##   --filtered
+##   --no-filtered
+##        Reads that are marked as failing QC checks will (will not) be extracted.
+##        [Default: extract filtered reads]
+## 
+##   -q, --quiet
+##        Suppress informational messages [Default: print messages]
+## 
+##   -s, --strict
+##        Keep bam2fastq&#39;s processing to a minimum, assuming that the BAM strictly       meets specifications. [Default: allow some errors in the BAM]
+## 
+## 
+## mv: cannot stat `luad-0003-NT_M&#39;: No such file or directory
+## rm: cannot remove `luad-0003-NT_1&#39;: No such file or directory
+## rm: cannot remove `luad-0003-NT_2&#39;: No such file or directory
+## Warning: Could not open read file &quot;luad-0003-NT.fastq&quot; for reading; skipping...
+## Error: No input read files were valid
+## (ERR): bowtie2-align exited with value 1
+## [main_samview] fail to open &quot;luad-0003-NT-mapped-1.sam&quot; for reading.
+## [bam_header_read] invalid BAM binary header (this is not a BAM file).
+## [main_samview] fail to read the header from &quot;-&quot;.
+## 1 0/0
+## 2 0/0
+## 3 0/0
+## [samopen] no @SQ lines in the header.
+## [sam_read1] missing header? Abort!
+## rm: cannot remove `luad-0003-NT.fastq&#39;: No such file or directory
+## rm: cannot remove `luad-0003-NT-mapped-1.sam&#39;: No such file or directory
+## bam2fastq v1.1.0 - extract sequences from a BAM file
+## 
+## Usage: bam2fastq [options] &lt;bam file&gt;
+## 
+## Options:
+##   -o FILENAME, --output FILENAME
+##        Specifies the name of the FASTQ file(s) that will be generated.  May
+##        contain the special characters % (replaced with the lane number) and
+##        # (replaced with _1 or _2 to distinguish PE reads, _M for unpaired reads).
+##        [Default: s_%#_sequence.txt]
+## 
+##   --pairs-to-stdout
+##        Write the paired reads to stdout 
+## 
+##   --all-to-stdout
+##        Write all reads to stdout, ignoring pairing
+## 
+##   -f, --force, --overwrite
+##        Create output files specified with --output, overwriting existing
+##        files if necessary [Default: exit program rather than overwrite files]
+## 
+##   --aligned
+##   --no-aligned
+##        Reads in the BAM that are aligned will (will not) be extracted.
+##        [Default: extract aligned reads]
+## 
+##   --unaligned
+##   --no-unaligned
+##        Reads in the BAM that are not aligned will (will not) be extracted.
+##        [Default: extract unaligned reads]
+## 
+##   --filtered
+##   --no-filtered
+##        Reads that are marked as failing QC checks will (will not) be extracted.
+##        [Default: extract filtered reads]
+## 
+##   -q, --quiet
+##        Suppress informational messages [Default: print messages]
+## 
+##   -s, --strict
+##        Keep bam2fastq&#39;s processing to a minimum, assuming that the BAM strictly       meets specifications. [Default: allow some errors in the BAM]
+## 
+## 
+## mv: cannot stat `luad-0003-TP_M&#39;: No such file or directory
+## rm: cannot remove `luad-0003-TP_1&#39;: No such file or directory
+## rm: cannot remove `luad-0003-TP_2&#39;: No such file or directory
+## Warning: Could not open read file &quot;luad-0003-TP.fastq&quot; for reading; skipping...
+## Error: No input read files were valid
+## (ERR): bowtie2-align exited with value 1
+## [main_samview] fail to open &quot;luad-0003-TP-mapped-1.sam&quot; for reading.
+## [bam_header_read] invalid BAM binary header (this is not a BAM file).
+## [main_samview] fail to read the header from &quot;-&quot;.
+## 1 0/0
+## 2 0/0
+## 3 0/0
+## [samopen] no @SQ lines in the header.
+## [sam_read1] missing header? Abort!
+## rm: cannot remove `luad-0003-TP.fastq&#39;: No such file or directory
+## rm: cannot remove `luad-0003-TP-mapped-1.sam&#39;: No such file or directory
+## bam2fastq v1.1.0 - extract sequences from a BAM file
+## 
+## Usage: bam2fastq [options] &lt;bam file&gt;
+## 
+## Options:
+##   -o FILENAME, --output FILENAME
+##        Specifies the name of the FASTQ file(s) that will be generated.  May
+##        contain the special characters % (replaced with the lane number) and
+##        # (replaced with _1 or _2 to distinguish PE reads, _M for unpaired reads).
+##        [Default: s_%#_sequence.txt]
+## 
+##   --pairs-to-stdout
+##        Write the paired reads to stdout 
+## 
+##   --all-to-stdout
+##        Write all reads to stdout, ignoring pairing
+## 
+##   -f, --force, --overwrite
+##        Create output files specified with --output, overwriting existing
+##        files if necessary [Default: exit program rather than overwrite files]
+## 
+##   --aligned
+##   --no-aligned
+##        Reads in the BAM that are aligned will (will not) be extracted.
+##        [Default: extract aligned reads]
+## 
+##   --unaligned
+##   --no-unaligned
+##        Reads in the BAM that are not aligned will (will not) be extracted.
+##        [Default: extract unaligned reads]
+## 
+##   --filtered
+##   --no-filtered
+##        Reads that are marked as failing QC checks will (will not) be extracted.
+##        [Default: extract filtered reads]
+## 
+##   -q, --quiet
+##        Suppress informational messages [Default: print messages]
+## 
+##   -s, --strict
+##        Keep bam2fastq&#39;s processing to a minimum, assuming that the BAM strictly       meets specifications. [Default: allow some errors in the BAM]
+## 
+## 
+## mv: cannot stat `luad-0004-NT_M&#39;: No such file or directory
+## rm: cannot remove `luad-0004-NT_1&#39;: No such file or directory
+## rm: cannot remove `luad-0004-NT_2&#39;: No such file or directory
+## Warning: Could not open read file &quot;luad-0004-NT.fastq&quot; for reading; skipping...
+## Error: No input read files were valid
+## (ERR): bowtie2-align exited with value 1
+## [main_samview] fail to open &quot;luad-0004-NT-mapped-1.sam&quot; for reading.
+## [bam_header_read] invalid BAM binary header (this is not a BAM file).
+## [main_samview] fail to read the header from &quot;-&quot;.
+## 1 0/0
+## 2 0/0
+## 3 0/0
+## [samopen] no @SQ lines in the header.
+## [sam_read1] missing header? Abort!
+## rm: cannot remove `luad-0004-NT.fastq&#39;: No such file or directory
+## rm: cannot remove `luad-0004-NT-mapped-1.sam&#39;: No such file or directory
+## bam2fastq v1.1.0 - extract sequences from a BAM file
+## 
+## Usage: bam2fastq [options] &lt;bam file&gt;
+## 
+## Options:
+##   -o FILENAME, --output FILENAME
+##        Specifies the name of the FASTQ file(s) that will be generated.  May
+##        contain the special characters % (replaced with the lane number) and
+##        # (replaced with _1 or _2 to distinguish PE reads, _M for unpaired reads).
+##        [Default: s_%#_sequence.txt]
+## 
+##   --pairs-to-stdout
+##        Write the paired reads to stdout 
+## 
+##   --all-to-stdout
+##        Write all reads to stdout, ignoring pairing
+## 
+##   -f, --force, --overwrite
+##        Create output files specified with --output, overwriting existing
+##        files if necessary [Default: exit program rather than overwrite files]
+## 
+##   --aligned
+##   --no-aligned
+##        Reads in the BAM that are aligned will (will not) be extracted.
+##        [Default: extract aligned reads]
+## 
+##   --unaligned
+##   --no-unaligned
+##        Reads in the BAM that are not aligned will (will not) be extracted.
+##        [Default: extract unaligned reads]
+## 
+##   --filtered
+##   --no-filtered
+##        Reads that are marked as failing QC checks will (will not) be extracted.
+##        [Default: extract filtered reads]
+## 
+##   -q, --quiet
+##        Suppress informational messages [Default: print messages]
+## 
+##   -s, --strict
+##        Keep bam2fastq&#39;s processing to a minimum, assuming that the BAM strictly       meets specifications. [Default: allow some errors in the BAM]
+## 
+## 
+## mv: cannot stat `luad-0004-TP_M&#39;: No such file or directory
+## rm: cannot remove `luad-0004-TP_1&#39;: No such file or directory
+## rm: cannot remove `luad-0004-TP_2&#39;: No such file or directory
+## Warning: Could not open read file &quot;luad-0004-TP.fastq&quot; for reading; skipping...
+## Error: No input read files were valid
+## (ERR): bowtie2-align exited with value 1
+## [main_samview] fail to open &quot;luad-0004-TP-mapped-1.sam&quot; for reading.
+## [bam_header_read] invalid BAM binary header (this is not a BAM file).
+## [main_samview] fail to read the header from &quot;-&quot;.
+## 1 0/0
+## 2 0/0
+## 3 0/0
+## [samopen] no @SQ lines in the header.
+## [sam_read1] missing header? Abort!
+## rm: cannot remove `luad-0004-TP.fastq&#39;: No such file or directory
+## rm: cannot remove `luad-0004-TP-mapped-1.sam&#39;: No such file or directory
+## bam2fastq v1.1.0 - extract sequences from a BAM file
+## 
+## Usage: bam2fastq [options] &lt;bam file&gt;
+## 
+## Options:
+##   -o FILENAME, --output FILENAME
+##        Specifies the name of the FASTQ file(s) that will be generated.  May
+##        contain the special characters % (replaced with the lane number) and
+##        # (replaced with _1 or _2 to distinguish PE reads, _M for unpaired reads).
+##        [Default: s_%#_sequence.txt]
+## 
+##   --pairs-to-stdout
+##        Write the paired reads to stdout 
+## 
+##   --all-to-stdout
+##        Write all reads to stdout, ignoring pairing
+## 
+##   -f, --force, --overwrite
+##        Create output files specified with --output, overwriting existing
+##        files if necessary [Default: exit program rather than overwrite files]
+## 
+##   --aligned
+##   --no-aligned
+##        Reads in the BAM that are aligned will (will not) be extracted.
+##        [Default: extract aligned reads]
+## 
+##   --unaligned
+##   --no-unaligned
+##        Reads in the BAM that are not aligned will (will not) be extracted.
+##        [Default: extract unaligned reads]
+## 
+##   --filtered
+##   --no-filtered
+##        Reads that are marked as failing QC checks will (will not) be extracted.
+##        [Default: extract filtered reads]
+## 
+##   -q, --quiet
+##        Suppress informational messages [Default: print messages]
+## 
+##   -s, --strict
+##        Keep bam2fastq&#39;s processing to a minimum, assuming that the BAM strictly       meets specifications. [Default: allow some errors in the BAM]
+## 
+## 
+## mv: cannot stat `luad-0005-NT_M&#39;: No such file or directory
+## rm: cannot remove `luad-0005-NT_1&#39;: No such file or directory
+## rm: cannot remove `luad-0005-NT_2&#39;: No such file or directory
+## Warning: Could not open read file &quot;luad-0005-NT.fastq&quot; for reading; skipping...
+## Error: No input read files were valid
+## (ERR): bowtie2-align exited with value 1
+## [main_samview] fail to open &quot;luad-0005-NT-mapped-1.sam&quot; for reading.
+## [bam_header_read] invalid BAM binary header (this is not a BAM file).
+## [main_samview] fail to read the header from &quot;-&quot;.
+## 1 0/0
+## 2 0/0
+## 3 0/0
+## [samopen] no @SQ lines in the header.
+## [sam_read1] missing header? Abort!
+## rm: cannot remove `luad-0005-NT.fastq&#39;: No such file or directory
+## rm: cannot remove `luad-0005-NT-mapped-1.sam&#39;: No such file or directory
+## bam2fastq v1.1.0 - extract sequences from a BAM file
+## 
+## Usage: bam2fastq [options] &lt;bam file&gt;
+## 
+## Options:
+##   -o FILENAME, --output FILENAME
+##        Specifies the name of the FASTQ file(s) that will be generated.  May
+##        contain the special characters % (replaced with the lane number) and
+##        # (replaced with _1 or _2 to distinguish PE reads, _M for unpaired reads).
+##        [Default: s_%#_sequence.txt]
+## 
+##   --pairs-to-stdout
+##        Write the paired reads to stdout 
+## 
+##   --all-to-stdout
+##        Write all reads to stdout, ignoring pairing
+## 
+##   -f, --force, --overwrite
+##        Create output files specified with --output, overwriting existing
+##        files if necessary [Default: exit program rather than overwrite files]
+## 
+##   --aligned
+##   --no-aligned
+##        Reads in the BAM that are aligned will (will not) be extracted.
+##        [Default: extract aligned reads]
+## 
+##   --unaligned
+##   --no-unaligned
+##        Reads in the BAM that are not aligned will (will not) be extracted.
+##        [Default: extract unaligned reads]
+## 
+##   --filtered
+##   --no-filtered
+##        Reads that are marked as failing QC checks will (will not) be extracted.
+##        [Default: extract filtered reads]
+## 
+##   -q, --quiet
+##        Suppress informational messages [Default: print messages]
+## 
+##   -s, --strict
+##        Keep bam2fastq&#39;s processing to a minimum, assuming that the BAM strictly       meets specifications. [Default: allow some errors in the BAM]
+## 
+## 
+## mv: cannot stat `luad-0005-TP_M&#39;: No such file or directory
+## rm: cannot remove `luad-0005-TP_1&#39;: No such file or directory
+## rm: cannot remove `luad-0005-TP_2&#39;: No such file or directory
+## Warning: Could not open read file &quot;luad-0005-TP.fastq&quot; for reading; skipping...
+## Error: No input read files were valid
+## (ERR): bowtie2-align exited with value 1
+## [main_samview] fail to open &quot;luad-0005-TP-mapped-1.sam&quot; for reading.
+## [bam_header_read] invalid BAM binary header (this is not a BAM file).
+## [main_samview] fail to read the header from &quot;-&quot;.
+## 1 0/0
+## 2 0/0
+## 3 0/0
+## [samopen] no @SQ lines in the header.
+## [sam_read1] missing header? Abort!
+## rm: cannot remove `luad-0005-TP.fastq&#39;: No such file or directory
+## rm: cannot remove `luad-0005-TP-mapped-1.sam&#39;: No such file or directory
+## bam2fastq v1.1.0 - extract sequences from a BAM file
+## 
+## Usage: bam2fastq [options] &lt;bam file&gt;
+## 
+## Options:
+##   -o FILENAME, --output FILENAME
+##        Specifies the name of the FASTQ file(s) that will be generated.  May
+##        contain the special characters % (replaced with the lane number) and
+##        # (replaced with _1 or _2 to distinguish PE reads, _M for unpaired reads).
+##        [Default: s_%#_sequence.txt]
+## 
+##   --pairs-to-stdout
+##        Write the paired reads to stdout 
+## 
+##   --all-to-stdout
+##        Write all reads to stdout, ignoring pairing
+## 
+##   -f, --force, --overwrite
+##        Create output files specified with --output, overwriting existing
+##        files if necessary [Default: exit program rather than overwrite files]
+## 
+##   --aligned
+##   --no-aligned
+##        Reads in the BAM that are aligned will (will not) be extracted.
+##        [Default: extract aligned reads]
+## 
+##   --unaligned
+##   --no-unaligned
+##        Reads in the BAM that are not aligned will (will not) be extracted.
+##        [Default: extract unaligned reads]
+## 
+##   --filtered
+##   --no-filtered
+##        Reads that are marked as failing QC checks will (will not) be extracted.
+##        [Default: extract filtered reads]
+## 
+##   -q, --quiet
+##        Suppress informational messages [Default: print messages]
+## 
+##   -s, --strict
+##        Keep bam2fastq&#39;s processing to a minimum, assuming that the BAM strictly       meets specifications. [Default: allow some errors in the BAM]
+## 
+## 
+## mv: cannot stat `brca-0001-NT_M&#39;: No such file or directory
+## rm: cannot remove `brca-0001-NT_1&#39;: No such file or directory
+## rm: cannot remove `brca-0001-NT_2&#39;: No such file or directory
+## Warning: Could not open read file &quot;brca-0001-NT.fastq&quot; for reading; skipping...
+## Error: No input read files were valid
+## (ERR): bowtie2-align exited with value 1
+## [main_samview] fail to open &quot;brca-0001-NT-mapped-1.sam&quot; for reading.
+## [bam_header_read] invalid BAM binary header (this is not a BAM file).
+## [main_samview] fail to read the header from &quot;-&quot;.
+## 1 0/0
+## 2 0/0
+## 3 0/0
+## [samopen] no @SQ lines in the header.
+## [sam_read1] missing header? Abort!
+## rm: cannot remove `brca-0001-NT.fastq&#39;: No such file or directory
+## rm: cannot remove `brca-0001-NT-mapped-1.sam&#39;: No such file or directory
+## bam2fastq v1.1.0 - extract sequences from a BAM file
+## 
+## Usage: bam2fastq [options] &lt;bam file&gt;
+## 
+## Options:
+##   -o FILENAME, --output FILENAME
+##        Specifies the name of the FASTQ file(s) that will be generated.  May
+##        contain the special characters % (replaced with the lane number) and
+##        # (replaced with _1 or _2 to distinguish PE reads, _M for unpaired reads).
+##        [Default: s_%#_sequence.txt]
+## 
+##   --pairs-to-stdout
+##        Write the paired reads to stdout 
+## 
+##   --all-to-stdout
+##        Write all reads to stdout, ignoring pairing
+## 
+##   -f, --force, --overwrite
+##        Create output files specified with --output, overwriting existing
+##        files if necessary [Default: exit program rather than overwrite files]
+## 
+##   --aligned
+##   --no-aligned
+##        Reads in the BAM that are aligned will (will not) be extracted.
+##        [Default: extract aligned reads]
+## 
+##   --unaligned
+##   --no-unaligned
+##        Reads in the BAM that are not aligned will (will not) be extracted.
+##        [Default: extract unaligned reads]
+## 
+##   --filtered
+##   --no-filtered
+##        Reads that are marked as failing QC checks will (will not) be extracted.
+##        [Default: extract filtered reads]
+## 
+##   -q, --quiet
+##        Suppress informational messages [Default: print messages]
+## 
+##   -s, --strict
+##        Keep bam2fastq&#39;s processing to a minimum, assuming that the BAM strictly       meets specifications. [Default: allow some errors in the BAM]
+## 
+## 
+## mv: cannot stat `brca-0001-TP_M&#39;: No such file or directory
+## rm: cannot remove `brca-0001-TP_1&#39;: No such file or directory
+## rm: cannot remove `brca-0001-TP_2&#39;: No such file or directory
+## Warning: Could not open read file &quot;brca-0001-TP.fastq&quot; for reading; skipping...
+## Error: No input read files were valid
+## (ERR): bowtie2-align exited with value 1
+## [main_samview] fail to open &quot;brca-0001-TP-mapped-1.sam&quot; for reading.
+## [bam_header_read] invalid BAM binary header (this is not a BAM file).
+## [main_samview] fail to read the header from &quot;-&quot;.
+## 1 0/0
+## 2 0/0
+## 3 0/0
+## [samopen] no @SQ lines in the header.
+## [sam_read1] missing header? Abort!
+## rm: cannot remove `brca-0001-TP.fastq&#39;: No such file or directory
+## rm: cannot remove `brca-0001-TP-mapped-1.sam&#39;: No such file or directory
+## bam2fastq v1.1.0 - extract sequences from a BAM file
+## 
+## Usage: bam2fastq [options] &lt;bam file&gt;
+## 
+## Options:
+##   -o FILENAME, --output FILENAME
+##        Specifies the name of the FASTQ file(s) that will be generated.  May
+##        contain the special characters % (replaced with the lane number) and
+##        # (replaced with _1 or _2 to distinguish PE reads, _M for unpaired reads).
+##        [Default: s_%#_sequence.txt]
+## 
+##   --pairs-to-stdout
+##        Write the paired reads to stdout 
+## 
+##   --all-to-stdout
+##        Write all reads to stdout, ignoring pairing
+## 
+##   -f, --force, --overwrite
+##        Create output files specified with --output, overwriting existing
+##        files if necessary [Default: exit program rather than overwrite files]
+## 
+##   --aligned
+##   --no-aligned
+##        Reads in the BAM that are aligned will (will not) be extracted.
+##        [Default: extract aligned reads]
+## 
+##   --unaligned
+##   --no-unaligned
+##        Reads in the BAM that are not aligned will (will not) be extracted.
+##        [Default: extract unaligned reads]
+## 
+##   --filtered
+##   --no-filtered
+##        Reads that are marked as failing QC checks will (will not) be extracted.
+##        [Default: extract filtered reads]
+## 
+##   -q, --quiet
+##        Suppress informational messages [Default: print messages]
+## 
+##   -s, --strict
+##        Keep bam2fastq&#39;s processing to a minimum, assuming that the BAM strictly       meets specifications. [Default: allow some errors in the BAM]
+## 
+## 
+## mv: cannot stat `brca-0002-NT_M&#39;: No such file or directory
+## rm: cannot remove `brca-0002-NT_1&#39;: No such file or directory
+## rm: cannot remove `brca-0002-NT_2&#39;: No such file or directory
+## Warning: Could not open read file &quot;brca-0002-NT.fastq&quot; for reading; skipping...
+## Error: No input read files were valid
+## (ERR): bowtie2-align exited with value 1
+## [main_samview] fail to open &quot;brca-0002-NT-mapped-1.sam&quot; for reading.
+## [bam_header_read] invalid BAM binary header (this is not a BAM file).
+## [main_samview] fail to read the header from &quot;-&quot;.
+## 1 0/0
+## 2 0/0
+## 3 0/0
+## [samopen] no @SQ lines in the header.
+## [sam_read1] missing header? Abort!
+## rm: cannot remove `brca-0002-NT.fastq&#39;: No such file or directory
+## rm: cannot remove `brca-0002-NT-mapped-1.sam&#39;: No such file or directory
+## bam2fastq v1.1.0 - extract sequences from a BAM file
+## 
+## Usage: bam2fastq [options] &lt;bam file&gt;
+## 
+## Options:
+##   -o FILENAME, --output FILENAME
+##        Specifies the name of the FASTQ file(s) that will be generated.  May
+##        contain the special characters % (replaced with the lane number) and
+##        # (replaced with _1 or _2 to distinguish PE reads, _M for unpaired reads).
+##        [Default: s_%#_sequence.txt]
+## 
+##   --pairs-to-stdout
+##        Write the paired reads to stdout 
+## 
+##   --all-to-stdout
+##        Write all reads to stdout, ignoring pairing
+## 
+##   -f, --force, --overwrite
+##        Create output files specified with --output, overwriting existing
+##        files if necessary [Default: exit program rather than overwrite files]
+## 
+##   --aligned
+##   --no-aligned
+##        Reads in the BAM that are aligned will (will not) be extracted.
+##        [Default: extract aligned reads]
+## 
+##   --unaligned
+##   --no-unaligned
+##        Reads in the BAM that are not aligned will (will not) be extracted.
+##        [Default: extract unaligned reads]
+## 
+##   --filtered
+##   --no-filtered
+##        Reads that are marked as failing QC checks will (will not) be extracted.
+##        [Default: extract filtered reads]
+## 
+##   -q, --quiet
+##        Suppress informational messages [Default: print messages]
+## 
+##   -s, --strict
+##        Keep bam2fastq&#39;s processing to a minimum, assuming that the BAM strictly       meets specifications. [Default: allow some errors in the BAM]
+## 
+## 
+## mv: cannot stat `brca-0002-TP_M&#39;: No such file or directory
+## rm: cannot remove `brca-0002-TP_1&#39;: No such file or directory
+## rm: cannot remove `brca-0002-TP_2&#39;: No such file or directory
+## Warning: Could not open read file &quot;brca-0002-TP.fastq&quot; for reading; skipping...
+## Error: No input read files were valid
+## (ERR): bowtie2-align exited with value 1
+## [main_samview] fail to open &quot;brca-0002-TP-mapped-1.sam&quot; for reading.
+## [bam_header_read] invalid BAM binary header (this is not a BAM file).
+## [main_samview] fail to read the header from &quot;-&quot;.
+## 1 0/0
+## 2 0/0
+## 3 0/0
+## [samopen] no @SQ lines in the header.
+## [sam_read1] missing header? Abort!
+## rm: cannot remove `brca-0002-TP.fastq&#39;: No such file or directory
+## rm: cannot remove `brca-0002-TP-mapped-1.sam&#39;: No such file or directory
+## bam2fastq v1.1.0 - extract sequences from a BAM file
+## 
+## Usage: bam2fastq [options] &lt;bam file&gt;
+## 
+## Options:
+##   -o FILENAME, --output FILENAME
+##        Specifies the name of the FASTQ file(s) that will be generated.  May
+##        contain the special characters % (replaced with the lane number) and
+##        # (replaced with _1 or _2 to distinguish PE reads, _M for unpaired reads).
+##        [Default: s_%#_sequence.txt]
+## 
+##   --pairs-to-stdout
+##        Write the paired reads to stdout 
+## 
+##   --all-to-stdout
+##        Write all reads to stdout, ignoring pairing
+## 
+##   -f, --force, --overwrite
+##        Create output files specified with --output, overwriting existing
+##        files if necessary [Default: exit program rather than overwrite files]
+## 
+##   --aligned
+##   --no-aligned
+##        Reads in the BAM that are aligned will (will not) be extracted.
+##        [Default: extract aligned reads]
+## 
+##   --unaligned
+##   --no-unaligned
+##        Reads in the BAM that are not aligned will (will not) be extracted.
+##        [Default: extract unaligned reads]
+## 
+##   --filtered
+##   --no-filtered
+##        Reads that are marked as failing QC checks will (will not) be extracted.
+##        [Default: extract filtered reads]
+## 
+##   -q, --quiet
+##        Suppress informational messages [Default: print messages]
+## 
+##   -s, --strict
+##        Keep bam2fastq&#39;s processing to a minimum, assuming that the BAM strictly       meets specifications. [Default: allow some errors in the BAM]
+## 
+## 
+## mv: cannot stat `brca-0003-NT_M&#39;: No such file or directory
+## rm: cannot remove `brca-0003-NT_1&#39;: No such file or directory
+## rm: cannot remove `brca-0003-NT_2&#39;: No such file or directory
+## Warning: Could not open read file &quot;brca-0003-NT.fastq&quot; for reading; skipping...
+## Error: No input read files were valid
+## (ERR): bowtie2-align exited with value 1
+## [main_samview] fail to open &quot;brca-0003-NT-mapped-1.sam&quot; for reading.
+## [bam_header_read] invalid BAM binary header (this is not a BAM file).
+## [main_samview] fail to read the header from &quot;-&quot;.
+## 1 0/0
+## 2 0/0
+## 3 0/0
+## [samopen] no @SQ lines in the header.
+## [sam_read1] missing header? Abort!
+## rm: cannot remove `brca-0003-NT.fastq&#39;: No such file or directory
+## rm: cannot remove `brca-0003-NT-mapped-1.sam&#39;: No such file or directory
+## bam2fastq v1.1.0 - extract sequences from a BAM file
+## 
+## Usage: bam2fastq [options] &lt;bam file&gt;
+## 
+## Options:
+##   -o FILENAME, --output FILENAME
+##        Specifies the name of the FASTQ file(s) that will be generated.  May
+##        contain the special characters % (replaced with the lane number) and
+##        # (replaced with _1 or _2 to distinguish PE reads, _M for unpaired reads).
+##        [Default: s_%#_sequence.txt]
+## 
+##   --pairs-to-stdout
+##        Write the paired reads to stdout 
+## 
+##   --all-to-stdout
+##        Write all reads to stdout, ignoring pairing
+## 
+##   -f, --force, --overwrite
+##        Create output files specified with --output, overwriting existing
+##        files if necessary [Default: exit program rather than overwrite files]
+## 
+##   --aligned
+##   --no-aligned
+##        Reads in the BAM that are aligned will (will not) be extracted.
+##        [Default: extract aligned reads]
+## 
+##   --unaligned
+##   --no-unaligned
+##        Reads in the BAM that are not aligned will (will not) be extracted.
+##        [Default: extract unaligned reads]
+## 
+##   --filtered
+##   --no-filtered
+##        Reads that are marked as failing QC checks will (will not) be extracted.
+##        [Default: extract filtered reads]
+## 
+##   -q, --quiet
+##        Suppress informational messages [Default: print messages]
+## 
+##   -s, --strict
+##        Keep bam2fastq&#39;s processing to a minimum, assuming that the BAM strictly       meets specifications. [Default: allow some errors in the BAM]
+## 
+## 
+## mv: cannot stat `brca-0003-TP_M&#39;: No such file or directory
+## rm: cannot remove `brca-0003-TP_1&#39;: No such file or directory
+## rm: cannot remove `brca-0003-TP_2&#39;: No such file or directory
+## Warning: Could not open read file &quot;brca-0003-TP.fastq&quot; for reading; skipping...
+## Error: No input read files were valid
+## (ERR): bowtie2-align exited with value 1
+## [main_samview] fail to open &quot;brca-0003-TP-mapped-1.sam&quot; for reading.
+## [bam_header_read] invalid BAM binary header (this is not a BAM file).
+## [main_samview] fail to read the header from &quot;-&quot;.
+## 1 0/0
+## 2 0/0
+## 3 0/0
+## [samopen] no @SQ lines in the header.
+## [sam_read1] missing header? Abort!
+## rm: cannot remove `brca-0003-TP.fastq&#39;: No such file or directory
+## rm: cannot remove `brca-0003-TP-mapped-1.sam&#39;: No such file or directory
+## bam2fastq v1.1.0 - extract sequences from a BAM file
+## 
+## Usage: bam2fastq [options] &lt;bam file&gt;
+## 
+## Options:
+##   -o FILENAME, --output FILENAME
+##        Specifies the name of the FASTQ file(s) that will be generated.  May
+##        contain the special characters % (replaced with the lane number) and
+##        # (replaced with _1 or _2 to distinguish PE reads, _M for unpaired reads).
+##        [Default: s_%#_sequence.txt]
+## 
+##   --pairs-to-stdout
+##        Write the paired reads to stdout 
+## 
+##   --all-to-stdout
+##        Write all reads to stdout, ignoring pairing
+## 
+##   -f, --force, --overwrite
+##        Create output files specified with --output, overwriting existing
+##        files if necessary [Default: exit program rather than overwrite files]
+## 
+##   --aligned
+##   --no-aligned
+##        Reads in the BAM that are aligned will (will not) be extracted.
+##        [Default: extract aligned reads]
+## 
+##   --unaligned
+##   --no-unaligned
+##        Reads in the BAM that are not aligned will (will not) be extracted.
+##        [Default: extract unaligned reads]
+## 
+##   --filtered
+##   --no-filtered
+##        Reads that are marked as failing QC checks will (will not) be extracted.
+##        [Default: extract filtered reads]
+## 
+##   -q, --quiet
+##        Suppress informational messages [Default: print messages]
+## 
+##   -s, --strict
+##        Keep bam2fastq&#39;s processing to a minimum, assuming that the BAM strictly       meets specifications. [Default: allow some errors in the BAM]
+## 
+## 
+## mv: cannot stat `brca-0004-NT_M&#39;: No such file or directory
+## rm: cannot remove `brca-0004-NT_1&#39;: No such file or directory
+## rm: cannot remove `brca-0004-NT_2&#39;: No such file or directory
+## Warning: Could not open read file &quot;brca-0004-NT.fastq&quot; for reading; skipping...
+## Error: No input read files were valid
+## (ERR): bowtie2-align exited with value 1
+## [main_samview] fail to open &quot;brca-0004-NT-mapped-1.sam&quot; for reading.
+## [bam_header_read] invalid BAM binary header (this is not a BAM file).
+## [main_samview] fail to read the header from &quot;-&quot;.
+## 1 0/0
+## 2 0/0
+## 3 0/0
+## [samopen] no @SQ lines in the header.
+## [sam_read1] missing header? Abort!
+## rm: cannot remove `brca-0004-NT.fastq&#39;: No such file or directory
+## rm: cannot remove `brca-0004-NT-mapped-1.sam&#39;: No such file or directory
+## bam2fastq v1.1.0 - extract sequences from a BAM file
+## 
+## Usage: bam2fastq [options] &lt;bam file&gt;
+## 
+## Options:
+##   -o FILENAME, --output FILENAME
+##        Specifies the name of the FASTQ file(s) that will be generated.  May
+##        contain the special characters % (replaced with the lane number) and
+##        # (replaced with _1 or _2 to distinguish PE reads, _M for unpaired reads).
+##        [Default: s_%#_sequence.txt]
+## 
+##   --pairs-to-stdout
+##        Write the paired reads to stdout 
+## 
+##   --all-to-stdout
+##        Write all reads to stdout, ignoring pairing
+## 
+##   -f, --force, --overwrite
+##        Create output files specified with --output, overwriting existing
+##        files if necessary [Default: exit program rather than overwrite files]
+## 
+##   --aligned
+##   --no-aligned
+##        Reads in the BAM that are aligned will (will not) be extracted.
+##        [Default: extract aligned reads]
+## 
+##   --unaligned
+##   --no-unaligned
+##        Reads in the BAM that are not aligned will (will not) be extracted.
+##        [Default: extract unaligned reads]
+## 
+##   --filtered
+##   --no-filtered
+##        Reads that are marked as failing QC checks will (will not) be extracted.
+##        [Default: extract filtered reads]
+## 
+##   -q, --quiet
+##        Suppress informational messages [Default: print messages]
+## 
+##   -s, --strict
+##        Keep bam2fastq&#39;s processing to a minimum, assuming that the BAM strictly       meets specifications. [Default: allow some errors in the BAM]
+## 
+## 
+## mv: cannot stat `brca-0004-TP_M&#39;: No such file or directory
+## rm: cannot remove `brca-0004-TP_1&#39;: No such file or directory
+## rm: cannot remove `brca-0004-TP_2&#39;: No such file or directory
+## Warning: Could not open read file &quot;brca-0004-TP.fastq&quot; for reading; skipping...
+## Error: No input read files were valid
+## (ERR): bowtie2-align exited with value 1
+## [main_samview] fail to open &quot;brca-0004-TP-mapped-1.sam&quot; for reading.
+## [bam_header_read] invalid BAM binary header (this is not a BAM file).
+## [main_samview] fail to read the header from &quot;-&quot;.
+## 1 0/0
+## 2 0/0
+## 3 0/0
+## [samopen] no @SQ lines in the header.
+## [sam_read1] missing header? Abort!
+## rm: cannot remove `brca-0004-TP.fastq&#39;: No such file or directory
+## rm: cannot remove `brca-0004-TP-mapped-1.sam&#39;: No such file or directory
+## bam2fastq v1.1.0 - extract sequences from a BAM file
+## 
+## Usage: bam2fastq [options] &lt;bam file&gt;
+## 
+## Options:
+##   -o FILENAME, --output FILENAME
+##        Specifies the name of the FASTQ file(s) that will be generated.  May
+##        contain the special characters % (replaced with the lane number) and
+##        # (replaced with _1 or _2 to distinguish PE reads, _M for unpaired reads).
+##        [Default: s_%#_sequence.txt]
+## 
+##   --pairs-to-stdout
+##        Write the paired reads to stdout 
+## 
+##   --all-to-stdout
+##        Write all reads to stdout, ignoring pairing
+## 
+##   -f, --force, --overwrite
+##        Create output files specified with --output, overwriting existing
+##        files if necessary [Default: exit program rather than overwrite files]
+## 
+##   --aligned
+##   --no-aligned
+##        Reads in the BAM that are aligned will (will not) be extracted.
+##        [Default: extract aligned reads]
+## 
+##   --unaligned
+##   --no-unaligned
+##        Reads in the BAM that are not aligned will (will not) be extracted.
+##        [Default: extract unaligned reads]
+## 
+##   --filtered
+##   --no-filtered
+##        Reads that are marked as failing QC checks will (will not) be extracted.
+##        [Default: extract filtered reads]
+## 
+##   -q, --quiet
+##        Suppress informational messages [Default: print messages]
+## 
+##   -s, --strict
+##        Keep bam2fastq&#39;s processing to a minimum, assuming that the BAM strictly       meets specifications. [Default: allow some errors in the BAM]
+## 
+## 
+## mv: cannot stat `brca-0005-NT_M&#39;: No such file or directory
+## rm: cannot remove `brca-0005-NT_1&#39;: No such file or directory
+## rm: cannot remove `brca-0005-NT_2&#39;: No such file or directory
+## Warning: Could not open read file &quot;brca-0005-NT.fastq&quot; for reading; skipping...
+## Error: No input read files were valid
+## (ERR): bowtie2-align exited with value 1
+## [main_samview] fail to open &quot;brca-0005-NT-mapped-1.sam&quot; for reading.
+## [bam_header_read] invalid BAM binary header (this is not a BAM file).
+## [main_samview] fail to read the header from &quot;-&quot;.
+## 1 0/0
+## 2 0/0
+## 3 0/0
+## [samopen] no @SQ lines in the header.
+## [sam_read1] missing header? Abort!
+## rm: cannot remove `brca-0005-NT.fastq&#39;: No such file or directory
+## rm: cannot remove `brca-0005-NT-mapped-1.sam&#39;: No such file or directory
+## bam2fastq v1.1.0 - extract sequences from a BAM file
+## 
+## Usage: bam2fastq [options] &lt;bam file&gt;
+## 
+## Options:
+##   -o FILENAME, --output FILENAME
+##        Specifies the name of the FASTQ file(s) that will be generated.  May
+##        contain the special characters % (replaced with the lane number) and
+##        # (replaced with _1 or _2 to distinguish PE reads, _M for unpaired reads).
+##        [Default: s_%#_sequence.txt]
+## 
+##   --pairs-to-stdout
+##        Write the paired reads to stdout 
+## 
+##   --all-to-stdout
+##        Write all reads to stdout, ignoring pairing
+## 
+##   -f, --force, --overwrite
+##        Create output files specified with --output, overwriting existing
+##        files if necessary [Default: exit program rather than overwrite files]
+## 
+##   --aligned
+##   --no-aligned
+##        Reads in the BAM that are aligned will (will not) be extracted.
+##        [Default: extract aligned reads]
+## 
+##   --unaligned
+##   --no-unaligned
+##        Reads in the BAM that are not aligned will (will not) be extracted.
+##        [Default: extract unaligned reads]
+## 
+##   --filtered
+##   --no-filtered
+##        Reads that are marked as failing QC checks will (will not) be extracted.
+##        [Default: extract filtered reads]
+## 
+##   -q, --quiet
+##        Suppress informational messages [Default: print messages]
+## 
+##   -s, --strict
+##        Keep bam2fastq&#39;s processing to a minimum, assuming that the BAM strictly       meets specifications. [Default: allow some errors in the BAM]
+## 
+## 
+## mv: cannot stat `brca-0005-TP_M&#39;: No such file or directory
+## rm: cannot remove `brca-0005-TP_1&#39;: No such file or directory
+## rm: cannot remove `brca-0005-TP_2&#39;: No such file or directory
+## Warning: Could not open read file &quot;brca-0005-TP.fastq&quot; for reading; skipping...
+## Error: No input read files were valid
+## (ERR): bowtie2-align exited with value 1
+## [main_samview] fail to open &quot;brca-0005-TP-mapped-1.sam&quot; for reading.
+## [bam_header_read] invalid BAM binary header (this is not a BAM file).
+## [main_samview] fail to read the header from &quot;-&quot;.
+## 1 0/0
+## 2 0/0
+## 3 0/0
+## [samopen] no @SQ lines in the header.
+## [sam_read1] missing header? Abort!
+## rm: cannot remove `brca-0005-TP.fastq&#39;: No such file or directory
+## rm: cannot remove `brca-0005-TP-mapped-1.sam&#39;: No such file or directory
+</code></pre>
+
+<pre><code class="r">countFeaturesFromBam &lt;- function(metadata, features, dir = &quot;.&quot;) {
+  bamfiles &lt;- paste0(dir, &quot;/&quot;, metadata$shortnames)
+  counts &lt;- vector()
+  # use a for loop because r will run out of memory
+  for (bamfile in bamfiles) {
+    sample &lt;- readGAlignments(bamfile)
+    counts &lt;- cbind(counts, countOverlaps(features, sample, minoverlap = 5))
+  }
+  rownames(counts) &lt;- mcols(features)$tx_name
+  colnames(counts) &lt;- metadata$barcode
+  as.data.frame(counts)
+}
+luad_raw_counts &lt;- countFeaturesFromBam(luad_metadata, features, &#39;/inside/grotto/blin/trna-markers/datasets/luad/&#39;)
+</code></pre>
+
+<pre><code>## Error: could not find function &quot;readGAlignments&quot;
+</code></pre>
+
+<pre><code class="r">brca_raw_counts &lt;- countFeaturesFromBam(brca_metadata, features, &#39;/inside/grotto/blin/trna-markers/datasets/brca/&#39;)
+</code></pre>
+
+<pre><code>## Error: could not find function &quot;readGAlignments&quot;
+</code></pre>
+
+<pre><code class="r">save(file = &#39;luad-counts.RData&#39;, luad_raw_counts)
+</code></pre>
+
+<pre><code>## Error in save(file = &quot;luad-counts.RData&quot;, luad_raw_counts): object &#39;luad_raw_counts&#39; not found
+</code></pre>
+
+<pre><code class="r">save(file = &#39;brca-counts.RData&#39;, brca_raw_counts)
+</code></pre>
+
+<pre><code>## Error in save(file = &quot;brca-counts.RData&quot;, brca_raw_counts): object &#39;brca_raw_counts&#39; not found
+</code></pre>
+
+<pre><code class="r">normalizeCounts &lt;- function(counts, metadata) {
+    counts &lt;- counts[apply(counts, 1, function(row) length(which(row &gt; 0)) &gt; length(colnames(features_counts)) * 0.05), ]
+    counts &lt;- counts[apply(counts, 1, function(row) sum(row) &gt; 20), ]
+    col_data &lt;- data.frame(row.names = colnames(counts), condition = metadata$sample_type, type = &#39;single-read&#39;)
+    dds &lt;- DESeqDataSetFromMatrix(countData = counts, colData = col_data, design = ~ condition)
+    dds &lt;- estimateSizeFactors(dds)
+    t(t(feature_counts) / sizeFactors(dds))
+}
+luad_normalized_counts &lt;- normalizeCounts(luad_raw_counts, luad_metadata)
+</code></pre>
+
+<pre><code>## Error in normalizeCounts(luad_raw_counts, luad_metadata): object &#39;luad_raw_counts&#39; not found
+</code></pre>
+
+<pre><code class="r">brca_normalized_counts &lt;- normalizeCounts(brca_raw_counts, brca_metadata)
+</code></pre>
+
+<pre><code>## Error in normalizeCounts(brca_raw_counts, brca_metadata): object &#39;brca_raw_counts&#39; not found
+</code></pre>
+
+<pre><code class="r">estimateRemoveBatchEffect &lt;- function(counts, metadata) {
+    pheno_data &lt;- data.frame(row.names = metadata$barcode, sample_type = metadata$sample_type)
+    mod &lt;- model.matrix(~ as.factor(sample_type), data = pheno_data)
+    mod0 &lt;- model.matrix(~ 1, data = pheno_data)
+    svobj &lt;- sva(dat = counts, mod = mod, mod0 = mod0)
+    x &lt;- cbind(mod, svobj$sv)
+    hat &lt;- solve(t(x) %*% x) %*% t(x)
+    beta &lt;- hat %*% t(counts)
+    p &lt;- ncol(mod)
+    counts - t(as.matrix(x[, -c(1:p)]) %*% beta[-c(1:p), ])
+}
+luad_adjusted_counts &lt;- estimateRemoveBatchEffect(luad_normalized_counts, luad_metadata)
+</code></pre>
+
+<pre><code>## Error in estimateRemoveBatchEffect(luad_normalized_counts, luad_metadata): could not find function &quot;sva&quot;
+</code></pre>
+
+<pre><code class="r">brca_adjusted_counts &lt;- estimateRemoveBatchEffect(brca_normalized_counts, brca_metadata)
+</code></pre>
+
+<pre><code>## Error in estimateRemoveBatchEffect(brca_normalized_counts, brca_metadata): could not find function &quot;sva&quot;
+</code></pre>
+
+<pre><code class="r">plotPCA &lt;- function(counts) {
+  pca &lt;- prcomp(counts, scale = TRUE)
+  pca_scores &lt;- as.data.frame(pca$x)
+  ggplot(pca_scores, aes(x = PC1, y = PC2)) + geom_point(shape = 1)
+}
+plotPCACancerType &lt;- function(normalized_counts, adjusted_counts, metadata, cancer_code) {
+    plotPCA(t(normalized_counts)[, metadata$sample_type == &quot;TP&quot;]) + ggtitle(paste(cancer_code, &quot;TP Before&quot;))
+    plotPCA(t(adjusted_counts)[, metadata$sample_type == &quot;TP&quot;]) + ggtitle(paste(cancer_code, &quot;TP After&quot;))
+    plotPCA(t(normalized_counts)[, metadata$sample_type == &quot;NT&quot;]) + ggtitle(paste(cancer_code, &quot;NT Before&quot;))
+    plotPCA(t(adjusted_counts)[, metadata$sample_type == &quot;NT&quot;]) + ggtitle(paste(cancer_code, &quot;NT After&quot;))
+}
+plotPCACancerType(luad_normalized_counts, luad_adjusted_counts, luad_metadata, &quot;LUAD&quot;)
+</code></pre>
+
+<pre><code>## Error in t(normalized_counts): error in evaluating the argument &#39;x&#39; in selecting a method for function &#39;t&#39;: Error: object &#39;luad_normalized_counts&#39; not found
+</code></pre>
+
+<pre><code class="r">plotPCACancerType(brca_normalized_counts, brca_adjusted_counts, brca_metadata, &quot;LUAD&quot;)
+</code></pre>
+
+<pre><code>## Error in t(normalized_counts): error in evaluating the argument &#39;x&#39; in selecting a method for function &#39;t&#39;: Error: object &#39;brca_normalized_counts&#39; not found
+</code></pre>
+
+<pre><code class="r">save(file = &#39;luad-counts.RData&#39;, luad_raw_counts, luad_normalized_counts)
+</code></pre>
+
+<pre><code>## Error in save(file = &quot;luad-counts.RData&quot;, luad_raw_counts, luad_normalized_counts): objects &#39;luad_raw_counts&#39;, &#39;luad_normalized_counts&#39; not found
+</code></pre>
+
+<pre><code class="r">save(file = &#39;brca-counts.RData&#39;, brca_raw_counts, brca_normalized_counts)
+</code></pre>
+
+<pre><code>## Error in save(file = &quot;brca-counts.RData&quot;, brca_raw_counts, brca_normalized_counts): objects &#39;brca_raw_counts&#39;, &#39;brca_normalized_counts&#39; not found
 </code></pre>
 
 <pre><code class="r">save.image(&quot;more-cancers-image.RData&quot;)

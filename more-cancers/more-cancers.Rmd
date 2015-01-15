@@ -61,26 +61,27 @@ brca_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/more-cancers/br
 metadatas <- list(luad = luad_metadata, brca = brca_metadata)
 currentwd <- getwd()
 setwd('/inside/grotto/blin/trna-markers/datasets/raw')
-lapply(names(metadatas), function(cancer_code) {
+for (cancer_code in names(metadatas)) { 
   metadata <- metadatas[[cancer_code]]
-  sapply(metadata$analysis_id, function(analysis_id) {
+  for (analysis_id in metadata$analysis_id) {
+  	if (file.exists(analysis_id)) next # if exists, assume file was downloaded correctly and is not corrupted
     system(paste0('gtdownload -c $CGKEY -d ', analysis_id))
-  })
-  file.symlink(paste0(getwd(), metadata$analysis_id, '.bam'), paste0('/inside/grotto/blin/trna-markers/datasets/', cancer_code, '/', metadata$shortnames))
-})
+  }
+  file.symlink(paste0(getwd(), '/', metadata$analysis_id, '/', metadata$barcode, '_mirna.bam'), paste0('/inside/grotto/blin/trna-markers/datasets/', cancer_code, '/', metadata$shortnames))
+}
 setwd(currentwd)
 ```
 
-```{r remap, engine='bash'}
+```{r remap, engine = 'bash', cache = FALSE}
 remap() {
-  currentwd=`pwd` 
+  currentwd=`pwd`
   cd $1
-  for prefix in `ls *-TP.bam *-NT.bam | cut -f 1 -d .`; do
+  for prefix in `ls *-TP.bam *-NT.bam | cut -f 1 -d . | head`; do
     if [ ! -e $prefix-mapped.bam ]
     then
       if [ ! -e $prefix.fastq ]
       then
-        bam2fastq --force -o $prefix
+        bam2fastq --force -o $prefix# `readlink $prefix.bam`
         mv ${prefix}_M $prefix.fastq
         rm ${prefix}_1 ${prefix}_2
       fi
@@ -158,6 +159,8 @@ plotPCACancerType <- function(normalized_counts, adjusted_counts, metadata, canc
 	plotPCA(t(normalized_counts)[, metadata$sample_type == "NT"]) + ggtitle(paste(cancer_code, "NT Before"))
 	plotPCA(t(adjusted_counts)[, metadata$sample_type == "NT"]) + ggtitle(paste(cancer_code, "NT After"))
 }
+plotPCACancerType(luad_normalized_counts, luad_adjusted_counts, luad_metadata, "LUAD")
+plotPCACancerType(brca_normalized_counts, brca_adjusted_counts, brca_metadata, "LUAD")
 ```
 
 ```{r save-image}
