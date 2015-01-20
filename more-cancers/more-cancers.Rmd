@@ -76,7 +76,7 @@ setwd(currentwd)
 remap() {
   currentwd=`pwd`
   cd $1
-  for prefix in `ls *-TP.bam *-NT.bam | cut -f 1 -d . | head`; do
+  for prefix in `ls *-TP.bam *-NT.bam | cut -f 1 -d .`; do
     if [ ! -e $prefix-mapped.bam ]
     then
       if [ ! -e $prefix.fastq ]
