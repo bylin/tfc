@@ -206,7 +206,7 @@ hr {
 <body>
 <h2>correlate-mirnas</h2>
 
-<p><em>Last modified 03:37 PM on Jan 14, 2015. This document, R session image, knitr cache, figures, and other associated datasets are located in <code>cruncher:/inside/grotto/blin/trna-markers/correlate-mirnas/</code>.</em></p>
+<p><em>Last modified 05:15 PM on Jan 14, 2015. This document, R session image, knitr cache, figures, and other associated datasets are located in <code>cruncher:/inside/grotto/blin/trna-markers/correlate-mirnas/</code>.</em></p>
 
 <pre><code class="r">library(reshape2)
 library(ggplot2)
@@ -298,10 +298,15 @@ head(mir_corr, 10)
 
 <h3>Student&#39;s t-test for individual features</h3>
 
-<p>A two-tailed t-test with unequal variance is appropriate for determining if a feature is differentially expressed in normal vs. tumor, a two class feature. This is exactly what Broad Firehose uses. I&#39;ll do three t-tests:
-1) a paired test with matched tumor-normal pairs - each pair is from the same individual
-2) a paired test with matched tumor-normal pairs and unpaired samples paired with the median of the other class. In this case, the TP unpaired samples will be paired with the median of the NT sample expression.
-3) an independent t-test with data simply separated into tumor and normal</p>
+<p>A two-tailed t-test with unequal variance is appropriate for determining if a feature is differentially expressed in normal vs. tumor, a two class feature. This is exactly what Broad Firehose uses. I&#39;ll do three t-tests:</p>
+
+<ol>
+<li>a paired test with matched tumor-normal pairs - each pair is from the same individual</li>
+<li>a paired test with matched tumor-normal pairs and unpaired samples paired with the median of the other class. In this case, the TP unpaired samples will be paired with the median of the NT sample expression.</li>
+<li>an independent t-test with data simply separated into tumor and normal</li>
+</ol>
+
+<p>The t-test assumes that both samples are normally distributed. In other words, for a particular feature, it assumes that the expression of that feature across all samples follows a normal distribution. I mean, yeah, it&#39;s not perfect - the negative binomial distribution is empirically a better fit - but it&#39;s close enough. In any case, if someone objects, I can throw in a Wilcoxon rank-sum test too.</p>
 
 <pre><code class="r">nt_paired_counts &lt;- normalized_counts[, subset(prad_metadata, paired == TRUE &amp; sample_type == &quot;NT&quot;)$barcode]
 tp_paired_counts &lt;- normalized_counts[, subset(prad_metadata, paired == TRUE &amp; sample_type == &quot;TP&quot;)$barcode]
@@ -328,18 +333,8 @@ test_2_results &lt;- lapply(1:nrow(t_test_matrices[[1]]), function(index) t.test
 test_2_features &lt;- rownames(normalized_counts)[which(sapply(test_2_results, function(t_test) t_test$p.value &lt; bonferroni_corrected_pvalue))]
 </code></pre>
 
-<pre><code class="r">test_3_results &lt;- lapply(1:nrow(normalized_counts), function(index) {
-    t_test_input &lt;- melt(normalized_counts[, subset(prad_metadata, sample_type == &quot;NT&quot;)$barcode][index, ])
-    t_test_input &lt;- data.frame(t_test_input, condition = &quot;NT&quot;)
-    t_test_input &lt;- rbind(t_test_input, data.frame(melt(normalized_counts[, subset(prad_metadata, sample_type == &quot;TP&quot;)$barcode][index, ]), condition = &quot;TP&quot;))
-    t.test(t_test_input, paired = FALSE, var.equal = FALSE, formula = value ~ condition)
-})
-</code></pre>
-
-<pre><code>## Error in if (stderr &lt; 10 * .Machine$double.eps * abs(mx)) stop(&quot;data are essentially constant&quot;): missing value where TRUE/FALSE needed
-</code></pre>
-
-<pre><code class="r">test_3_features &lt;- rownames(normalized_counts)[which(sapply(test_3_results, function(t_test) t_test$p.value &lt; bonferroni_corrected_pvalue))]
+<pre><code class="r">test_3_results &lt;- lapply(1:nrow(normalized_counts), function(index) t.test(normalized_counts[, subset(prad_metadata, sample_type == &quot;NT&quot;)$barcode][index, ], normalized_counts[, subset(prad_metadata, sample_type == &quot;TP&quot;)$barcode][index, ], paired = FALSE, var.equal = FALSE))
+test_3_features &lt;- rownames(normalized_counts)[which(sapply(test_3_results, function(t_test) t_test$p.value &lt; bonferroni_corrected_pvalue))]
 </code></pre>
 
 <pre><code class="r">intersect(intersect(test_1_features, test_2_features), test_3_features)

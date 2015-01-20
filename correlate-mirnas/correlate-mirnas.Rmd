@@ -106,12 +106,7 @@ test_2_features <- rownames(normalized_counts)[which(sapply(test_2_results, func
 ```
 
 ```{r t-test-3}
-test_3_results <- lapply(1:nrow(normalized_counts), function(index) {
-	t_test_input <- melt(normalized_counts[, subset(prad_metadata, sample_type == "NT")$barcode][index, ])
-	t_test_input <- data.frame(t_test_input, cancer = FALSE)
-	t_test_input <- rbind(t_test_input, data.frame(melt(normalized_counts[, subset(prad_metadata, sample_type == "TP")$barcode][index, ]), cancer = TRUE))
-	t.test(t_test_input, paired = FALSE, var.equal = FALSE, formula = value ~ cancer)
-})
+test_3_results <- lapply(1:nrow(normalized_counts), function(index) t.test(normalized_counts[, subset(prad_metadata, sample_type == "NT")$barcode][index, ], normalized_counts[, subset(prad_metadata, sample_type == "TP")$barcode][index, ], paired = FALSE, var.equal = FALSE))
 test_3_features <- rownames(normalized_counts)[which(sapply(test_3_results, function(t_test) t_test$p.value < bonferroni_corrected_pvalue))]
 ```
 
