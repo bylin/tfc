@@ -1,0 +1,4 @@
+*
+!*.Rmd
+!*/figure/*.png
+!.gitignore

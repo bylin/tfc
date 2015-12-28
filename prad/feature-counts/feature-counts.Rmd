@@ -1,9 +1,9 @@
 # Count features in TCGA PRAD small RNA sequencing data
-_Last modified `r format(Sys.time(), "%I:%M %p on %b %d, %Y")`. This document, R session image, knitr cache, figures, and other associated datasets are located in `cruncher:/inside/grotto/blin/trna-markers/feature-counts/`._
+_Last modified `r format(Sys.time(), "%I:%M %p on %b %d, %Y")`. This document, R session image, knitr cache, figures, and other associated datasets are located in `cruncher:/inside/grotto/blin/trna-markers/prad/feature-counts/`._
 
 ```{r setup, echo=FALSE, warning=FALSE, results=FALSE, message=FALSE, errors=FALSE, cache=FALSE}
 library(knitr)
-opts_chunk$set(cache=TRUE, cache.path="/inside/grotto/blin/trna-markers/feature-counts/cache/", eval=TRUE, echo=TRUE, warning=FALSE, results=FALSE, message=FALSE, autodep=TRUE, dev="png", dpi=300)
+opts_chunk$set(cache=TRUE, cache.path="/inside/grotto/blin/trna-markers/prad/feature-counts/cache/", eval=TRUE, echo=TRUE, warning=FALSE, results=FALSE, message=FALSE, autodep=TRUE, dev="png", dpi=300)
 ```
 
 ```{r libraries, cache=FALSE}
@@ -41,7 +41,7 @@ frags <- convertChrNames(frags, "Ensembl")
 TCGA miRNA-Seq protocol filters these out through size selection.
 ### Angiogenin dependent tRNA halves
 
-Andrew has generated a feature list (available at `/inside/grotto/blin/trna-markers/feature-counts/hg19-trnahalfs.gtf`), so we'll use that for now. It's stored as a `.gtf` file, so it follows a similar process as above. Currently, there is an issue with Andrew's covariance model that results in reversed 5' tRFs, with end = start - 1. For the time being, those features have been deleted from the list. This list 
+Andrew has generated a feature list (available at `/inside/grotto/blin/trna-markers/prad/feature-counts/hg19-trnahalfs.gtf`), so we'll use that for now. It's stored as a `.gtf` file, so it follows a similar process as above. Currently, there is an issue with Andrew's covariance model that results in reversed 5' tRFs, with end = start - 1. For the time being, those features have been deleted from the list. This list 
 
  features-halves}
 halves <- read.delim('hg19-trnahalves.gtf', header = FALSE, col.names = c("seqid", "source", "type", "start", "end", "score", "strand", "phase", "attributes"))

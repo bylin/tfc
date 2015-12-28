@@ -1,9 +1,9 @@
 ## batch-effects
-_Last modified `r format(Sys.time(), "%I:%M %p on %b %d, %Y")`. This document, R session image, knitr cache, figures, and other associated datasets are located in `cruncher:/inside/grotto/blin/trna-markers/batch-effects/`._
+_Last modified `r format(Sys.time(), "%I:%M %p on %b %d, %Y")`. This document, R session image, knitr cache, figures, and other associated datasets are located in `cruncher:/inside/grotto/blin/trna-markers/prad/batch-effects/`._
 
 ```{r setup, echo=FALSE, warning=FALSE, results=FALSE, message=FALSE, errors=FALSE, cache=FALSE}
 library(knitr)
-opts_chunk$set(cache=TRUE, cache.path="/inside/grotto/blin/trna-markers/batch-effects/cache/", eval=TRUE, echo=TRUE, warning=FALSE, results=FALSE, message=FALSE, autodep=TRUE, dev="png", dpi=300)
+opts_chunk$set(cache=TRUE, cache.path="/inside/grotto/blin/trna-markers/prad/batch-effects/cache/", eval=TRUE, echo=TRUE, warning=FALSE, results=FALSE, message=FALSE, autodep=TRUE, dev="png", dpi=300)
 ```
 
 ```{r libraries, cache=FALSE}

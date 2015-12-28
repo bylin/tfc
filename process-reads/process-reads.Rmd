@@ -1,31 +1,37 @@
-## process-reads
+# Process data
 _Last modified `r format(Sys.time(), "%I:%M %p on %b %d, %Y")`. This document, R session image, knitr cache, figures, and other associated datasets are located in `cruncher:/inside/grotto/blin/trna-markers/process-reads/`._
 
 ```{r setup, echo=FALSE, warning=FALSE, results=FALSE, message=FALSE, errors=FALSE, cache=FALSE}
 library(knitr)
-opts_chunk$set(cache=TRUE, cache.path="/inside/grotto/blin/trna-markers/process-reads/cache/", eval=TRUE, echo=TRUE, warning=FALSE, results=FALSE, message=FALSE, autodep=TRUE, dev="png", dpi=300)
+opts_chunk$set(cache = TRUE, cache.path = "/inside/grotto/blin/trna-markers/process-reads/cache/", eval = TRUE, echo = TRUE, warning = FALSE, results = FALSE, message = FALSE, autodep = TRUE, dev = "png", dpi = 300)
 ```
 
 ```{r libraries, cache=FALSE}
 library(stringr)
+library(GenomicRanges)
+library(GenomicAlignments)
+library(Biobase)
+library(DESeq2)
+library(sva)
 source('/inside/grotto/blin/programs/convertChrNames.R')
+load('/inside/grotto/blin/trna-markers/feature-counts/features.RData')
 ```
 
-tRNA fragments have been implicated in cancer. For instance, tRF-1001 was shown to be required for prostate cancer cell proliferation in [Lee et al. 2009](http://www.ncbi.nlm.nih.gov/pubmed/19933153). We want to generate a list of other such tRNA fragments for further analysis. Rather than looking at the differential expression of tRFs, we will use miRNAs known to be involved in cancer as a proxy for correlating tRFs with cancer. To do that, we'll generate a list of TCGA PRAD datasets and download them, re-map the reads to a feature list that includes a few key miRNAs, then generate a matrix of counts. Correlations and corresponding statistical analyses can be found in [correlate-features](correlate-features.html).
+We are expanding our analysis to lung adenocarcinoma (LUAD) and breast invasive carcinoma (BRCA), two of the most common cancers.
 
-## Tumor-normal matched data
-The TCGA BAM files are huge and can be upwards to 50 Gb per file at [CGHub](https://browser.cghub.ucsc.edu/). I downloaded a [summary tab-separated file](file:///Users/blin/Desktop/grotto/trna-markers/process-reads/prad-summary.tab), filtering for PRAD miRNA-Seq assembled with hg19/GRCh37. 
-
-The TCGA data has a lot of extraneous samples. Each person either has one TP (primary tumor) dataset, one NT (normal tissue) dataset, or both. Newer data is preferred over older data. I first get matched TP-NT samples by participant ID, then for unmatched samples, I simply filter for the most recent sample (again by participant). Upon visual inspection, all NT datasets have at least one TP dataset from the same patient (participant). We can filter out datasets by existence of the NT file, then grab the most recent TP and NT datasets for each patient.
+## Download raw reads and metadata
 
 ```{r parse-metadata-function}
-parseMetadata <- function(metadata) {
+# metadata_file: sample metadata downloaded from CGHub in tab delimited form
+# cancer_code: short abbreviation in lowercase describing the cancer type, e.g. "prad" or "luad"
+parseMetadata <- function(metadata_file, cancer_code) {
+  metadata <- read.table(metadata_file, header = TRUE, sep = '\t', as.is = TRUE)
   metadata <- metadata[, c('barcode', 'sample_type', 'filename', 'analysis_id', 'uploaded', 'participant_id')]
   # convert character "uploaded" column to date object for easier comparison
   metadata$uploaded <- strptime(gsub("/", "-", metadata$uploaded), "%Y-%m-%d")
   # start by getting matched pairs
   # all NT datasets have at least one TP dataset from the same patient (participant). We can filter out datasets by existence of the NT file, then grab the most recent TP and NT datasets for each patient.
-  paired <- subset(metadata, participant_id %in% unique(subset(metadata, sample_type=="NT")$participant_id))
+  paired <- subset(metadata, participant_id %in% subset(metadata, sample_type == "NT")$participant_id & participant_id %in% subset(metadata, sample_type == "TP")$participant_id)
   paired$paired <- TRUE # remember which samples are matched tumor/normal
   parsed_metadata <- data.frame()
   for (current_id in unique(paired$participant_id)) {
@@ -33,96 +39,198 @@ parseMetadata <- function(metadata) {
     tp <- subset(paired, participant_id == current_id & sample_type == "TP")
     parsed_metadata <- rbind(parsed_metadata, tp[which(tp$uploaded == max(tp$uploaded)), ], nt[which(nt$uploaded == max(nt$uploaded)), ])
   }
-  # now for the NT and TP singles. 
-  singles <- metadata[which(!(metadata$participant_id %in% parsed_metadata$participant_id)), ]
+  # now for the unpaired samples
+  singles <- metadata[-which(metadata$participant_id %in% parsed_metadata$participant_id), ]
   singles$paired <- FALSE
   for (current_id in unique(singles$participant_id)) {
     ps <- subset(singles, participant_id == current_id) # get all samples for this participant
     parsed_metadata <- rbind(parsed_metadata, ps[which(ps$uploaded == max(ps$uploaded)), ])
   }
+  # create participant ID numbers and new filenames
+  numbering <- match(parsed_metadata$participant_id, unique(parsed_metadata$participant_id))
+  parsed_metadata$shortids <- numbering
+  numbering <- formatC(numbering, flag = "0", digits = 3)
+  parsed_metadata$shortnames <- paste0(cancer_code, "-", numbering, "-", parsed_metadata$sample_type)
+  # reencode upload date as a string - it's encoded as a time object, screwing up data frame operations
+  parsed_metadata$uploaded <- as.character(parsed_metadata$uploaded)
   parsed_metadata
 }
 ```
 
 ```{r parse-metadata}
-prad_metadata <- read.table('/inside/grotto/blin/trna-markers/process-reads/prad-summary.tab', header=TRUE, sep='\t', as.is=TRUE)
-prad_metadata <- parseMetadata(prad_metadata)
-numbering <- match(prad_metadata$participant_id, unique(prad_metadata$participant_id)) # assign each patient new ID, internal to this analysis
-prad_metadata$shortids <- numbering
-numbering <- formatC(numbering, flag = "0", digits = 3) # convert to 4 digit number (may need to accomodate many more patients/samples in the future
-prad_metadata$shortnames <- paste0('prad-', numbering, "-", prad_metadata$sample_type)
-write(prad_metadata$analysis_id, file="prad-samples.txt")
+luad_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/luad-summary.tab', 'luad')
+brca_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/brca-summary.tab', 'brca')
 ```
 
-A couple notes: first, it's difficult to work with the raw filenames (e.g. `TCGA-HC-8260-11A-01R-2262-13_mirna.bam`). We want to use something more along the lines of `prad-001-TP.bam`, with the number corresponding to a patient. 
-
-Second, the analysis IDs are written to a file so `bash` can run `gtdownload`. This may take a few hours or days to run, depending on how much TCGA data there is.
-
-
-```{r download-files, engine="bash"}
-cd /inside/grotto/blin/trna-markers/mirna/prad
-for uuid in `cat /inside/grotto/blin/trna-markers/process-reads/prad-samples.txt`; do
-  gtdownload -c $CGKEY -d $uuid;
-  rm $uuid.gto;
-  mv $uuid/*.bam .;
-  rm -rf $uuid
-done
-cd /inside/grotto/blin/trna-markers/process-reads
-```
-
-```{r rename-files}
-currentwd <- getwd() 
-setwd('/inside/grotto/blin/trna-markers/mirna/prad')
-file.rename(prad_metadata$filename, paste0(prad_metadata$shortnames, ".bam"))
+```{r download-files, eval = FALSE}
+metadatas <- list(luad = luad_metadata, brca = brca_metadata)
+currentwd <- getwd()
+setwd('/inside/grotto/blin/trna-markers/datasets/raw')
+for (cancer_code in names(metadatas)) { 
+  metadata <- metadatas[[cancer_code]]
+  for (analysis_id in metadata$analysis_id) {
+  	if (file.exists(analysis_id)) next # if exists, assume file was downloaded correctly and is not corrupted
+    system(paste0('gtdownload -c $CGKEY -d ', analysis_id))
+  }
+  file.symlink(paste0(getwd(), '/', metadata$analysis_id, '/', metadata$barcode, '_mirna.bam'), paste0('/inside/grotto/blin/trna-markers/datasets/', cancer_code, '/', metadata$shortnames, '.bam'))
+}
 setwd(currentwd)
 ```
 
-## Remap reads
-
-Originally, the plan was to remap the reads to hg19 and to the extended feature list containing tRNA halves. The main advantage of this would be to enable multimapping reads, since the original mapping maps reads to single locations. We also don't know what assembler, options, or assumptions were made for the TCGA miRNA mapping. A side benefit of remapping would be to keep the cancer data comparable with our lab internal sequencing data.* 
+We are missing `01810b1a-84e4-43d5-8a1e-42b132a1126f`, which is `brca-0939-TP.bam`. It's been removed for now.
 
 
-```{r remap, engine="bash"}
-cd /inside/grotto/blin/trna-markers/mirna/prad
-for prefix in `ls *-TP.bam *-NT.bam | cut -f 1 -d .`; do
-  if [ ! -e $prefix-mapped.bam ]
-  then
-    if [ ! -e $prefix.fastq ]
+## Remap reads to features
+
+```{r remap, engine = 'bash', cache = FALSE, eval = FALSE}
+remap() {
+  currentwd=`pwd`
+  cd $1
+  for prefix in `ls *-TP.bam *-NT.bam | cut -f 1 -d .`; do
+    if [ ! -e $prefix-mapped.bam ]
     then
-      bam2fastq --force -o $prefix# `readlink $prefix.bam`
-      mv ${prefix}_M $prefix.fastq
-      rm ${prefix}_1 ${prefix}_2
+      if [ ! -e $prefix.fastq ]
+      then
+        bam2fastq --force -o $prefix# `readlink $prefix.bam`
+        mv ${prefix}_M $prefix.fastq
+        rm ${prefix}_1 ${prefix}_2
+      fi
+      bowtie2 -x ~/grotto/data/hg19 -k 100 -U ${prefix}.fastq -S $prefix-mapped-1.sam
+      samtools view -S -F 4 -h -u $prefix-mapped-1.sam | samtools view -F 512 -h  - > $prefix-mapped-2.sam
+      bowtie2-best-mapped.py $prefix-mapped-2.sam | samtools view -S -u - | samtools sort - $prefix-mapped # auto appends .bam
     fi
-    bowtie2 -x ~/grotto/data/hg19 -k 100 -U ${prefix}.fastq -S $prefix-mapped-1.sam
-    samtools view -S -F 4 -h -u $prefix-mapped-1.sam | samtools view -F 512 -h  - > $prefix-mapped-2.sam
-    bowtie2-best-mapped.py $prefix-mapped-2.sam | samtools view -S -u - | samtools sort - $prefix-mapped # auto appends .bam
-  fi
-  rm $prefix.fastq 2> /dev/null
-  rm $prefix-mapped-1.sam 2> /dev/null
-  rm $prefix-mapped-2.sam 2> /dev/null
-done
-cd /inside/grotto/blin/trna-markers/process-reads/
+    rm -f $prefix.fastq
+    rm -f $prefix-mapped-1.sam
+    rm -f $prefix-mapped-2.sam
+  done
+  cd $currentwd
+}
+remap /inside/grotto/blin/trna-markers/datasets/luad
+remap /inside/grotto/blin/trna-markers/datasets/brca
 ```
 
-This code is adapted from external scripts. We iterate through all downloaded BAM files, convert them to fastq using `bam2fastq`, map them to hg19 and mature tRNAs with `bowtie2` with a maximum of 100 mappings, and filter out unmapped and low quality reads using `samtools`**. `bowtie2-best-mapped.py`, adapted from Andrew's script, finds the best scoring multimappings from `bowtie2` output and discards multimappings with lower scores.
+## Count reads
 
-For survival analysis, we also need clinical data. I don't know of a way to do this automatically, so I went to the [TCGA Data Matrix portal](https://tcga-data.nci.nih.gov/tcga/dataAccessMatrix.htm?mode=ApplyFilter) with these options:
+### Raw counts
 
-![data-matrix-options](figure/data-matrix-options.png)
-
-Then, I downloaded the archive in Biotab format, and moved the file `nationwidechildrens.org_clinical_patient_prad.txt` to `prad-clinical-biotab-04012015.tab'. I also didn't know how to get the batch data, so I just copy pasted the tabular format information and formatted it manually.
-
-```{r process-clinical-data}
-prad_clinical <- read.table('prad-clinical-biotab-04012015.tab', header = TRUE, sep = "\t", stringsAsFactors = FALSE)
-prad_batches <- read.table('prad-clinical-batches-04012015.tab', header = TRUE, sep = "\t", as.is = c(FALSE, TRUE))
-prad_clinical$bcr_patient_uuid <- tolower(prad_clinical$bcr_patient_uuid) # all data file ids are in lowercase, not sure if matters
-prad_clinical$days_survived <- replace(prad_clinical$death_days_to, prad_clinical$death_days_to == "[Not Applicable]", prad_clinical$last_contact_days_to[which(prad_clinical$death_days_to == "[Not Applicable]")]) # either days from initial prognosis to death or initial prognosis to censor time
-prad_clinical$batch <- prad_batches[match(prad_clinical$bcr_patient_barcode, prad_batches$barcode), "batch"]
-match_ids <- match(prad_metadata$participant_id, prad_clinical$bcr_patient_uuid)
-prad_clinical <- with(prad_clinical[match_ids, ], data.frame(prad_metadata, days_survived = as.integer(days_survived), vital_status = ifelse(vital_status == "Alive", 0, 1), pathologic_T, pathologic_M, pathologic_N, gleason_score = as.integer(gleason_score), age = abs(round(as.integer(birth_days_to)/365)), batch = batch)) # maybe change to age_at _initial_pathologic_diagnosis?
+```{r count-features-function}
+countFeaturesFromBam <- function(metadata, features, dir = ".") {
+  bamfiles <- paste0(dir, "/", metadata$shortnames, "-mapped.bam")
+  counts <- vector()
+  # use a for loop because r will run out of memory
+  for (bamfile in bamfiles) {
+    sample <- readGAlignments(bamfile)
+    sample <- convertChrNames(sample, "Ensembl")
+    counts <- cbind(counts, countOverlaps(features, sample, minoverlap = 5))
+  }
+  rownames(counts) <- mcols(features)$tx_name
+  colnames(counts) <- metadata$barcode
+  as.data.frame(counts)
+}
 ```
 
-```{r save-image, cache=FALSE}
-save(prad_metadata, prad_clinical, file = 'prad-metadata.RData')
+```{r count-features-luad}
+luad_raw_counts <- countFeaturesFromBam(luad_metadata, features, '/inside/grotto/blin/trna-markers/datasets/luad/') 
+save(file = 'luad-counts.RData', luad_raw_counts)
+```
+
+```{r count-features-brca}
+brca_raw_counts <- countFeaturesFromBam(brca_metadata, features, '/inside/grotto/blin/trna-markers/datasets/brca/')
+save(file = 'brca-counts.RData', brca_raw_counts)
+```
+
+### Normalized counts
+
+```{r normalize-counts}
+normalizeCounts <- function(counts, metadata) {
+	counts <- counts[apply(counts, 1, function(row) length(which(row > 0)) > length(colnames(features_counts)) * 0.05), ]
+	counts <- counts[apply(counts, 1, function(row) sum(row) > 20), ]
+	col_data <- data.frame(row.names = colnames(counts), condition = metadata$sample_type, type = 'single-read')
+	dds <- DESeqDataSetFromMatrix(countData = counts, colData = col_data, design = ~ condition)
+	dds <- estimateSizeFactors(dds)
+	t(t(feature_counts) / sizeFactors(dds))
+}
+luad_normalized_counts <- normalizeCounts(luad_raw_counts, luad_metadata)
+brca_normalized_counts <- normalizeCounts(brca_raw_counts, brca_metadata)
+```
+
+## Clinical data
+
+```{r get-clinical-data}
+processClinicalDataFile <- function(biotab_file, batch_file) {
+  biotab <- read.table(biotab_file, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+  batches <- read.table(batch_file, header = TRUE, sep = "\t", as.is = c(FALSE, TRUE))
+  biotab$bcr_patient_uuid <- tolower(biotab$bcr_patient_uuid) # all data file ids are in lowercase, not sure if matters
+  biotab$days_survived <- replace(biotab$death_days_to, biotab$death_days_to == "[Not Applicable]", biotab$last_contact_days_to[which(biotab$death_days_to == "[Not Applicable]")]) # either days from initial prognosis to death or initial prognosis to censor time
+  biotab$batch <- batches[match(biotab$bcr_patient_barcode, batches$barcode), "batch"]
+  biotab
+}
+luad_clinical <- processClinicalDataFile('luad-clinical-biotab-04032015.tab', 'luad-clinical-batches-04032015.tab')
+luad_clinical <- with(luad_clinical[match(luad_metadata$participant_id, luad_clinical$bcr_patient_uuid), ], 
+                      data.frame(luad_metadata,
+                                gender = gender, 
+                                race = race,
+                                smoker = ifelse(tobacco_smoking_history_indicator == "Lifelong Non-smoker", 0, 1), # NA doesn't return true or false, just NA. this is useful.
+                                t_stage = ajcc_tumor_pathologic_pt, 
+                                m_stage = ajcc_metastasis_pathologic_pm, 
+                                n_stage = ajcc_nodes_pathologic_pn,
+                                stage = ajcc_pathologic_tumor_stage,
+                                days_survived = as.integer(days_survived), 
+                                vital_status = ifelse(vital_status == "Alive", 0, 1),
+                                age = age_at_initial_pathologic_diagnosis,
+                                batch = batch))
+brca_clinical <- processClinicalDataFile('brca-clinical-biotab-04032015.tab', 'brca-clinical-batches-04032015.tab')
+brca_clinical <- with(brca_clinical[match(brca_metadata$participant_id, brca_clinical$bcr_patient_uuid), ], 
+                      data.frame(brca_metadata,
+                                ethnicity = ethnicity,
+                                race = race,
+                                vital_status = ifelse(vital_status == "Alive", 0, 1),
+                                days_survived = as.integer(days_survived),
+                                age = age_at_diagnosis,
+                                t_stage = ajcc_tumor_pathologic_pt, 
+                                m_stage = ajcc_metastasis_pathologic_pm, 
+                                n_stage = ajcc_nodes_pathologic_pn,
+                                stage = ajcc_pathologic_tumor_stage,
+                                er_status = er_status_by_ihc,
+                                pr_status = pr_status_by_ihc,
+                                her2_status = her2_status_by_ihc,
+                                batch = batch))
+```
+
+## Check for batch effects
+
+```{r batch-effects}
+removeBatchEffects <- function(metadata, counts) {
+  pheno_data <- data.frame(row.names = metadata$barcode, sample_type = metadata$sample_type)
+  mod <- model.matrix(~ 1, data = pheno_data)
+  batch <- as.factor(ifelse(!is.na(metadata$batch), as.character(metadata$batch), "Batch Unknown"))
+  batch_removed_counts <- ComBat(dat = counts, batch = batch, mod = mod)
+}
+luad_adjusted_counts <- removeBatchEffects(luad_metadata, luad_normalized_counts)
+brca_adjusted_counts <- removeBatchEffects(brca_metadata, brca_normalized_counts)
+```
+
+```{r pca, fig.show = "hold", out.width = "400px", fig.width = 4, fig.height = 3}
+plotPCA <- function(counts) {
+  pca <- prcomp(counts, scale = TRUE)
+  pca_scores <- as.data.frame(pca$x)
+  ggplot(pca_scores, aes(x = PC1, y = PC2)) + geom_point(shape = 1)
+}
+plotPCACancerType <- function(normalized_counts, adjusted_counts, metadata, cancer_code) {
+	plotPCA(t(normalized_counts)[, metadata$sample_type == "TP"]) + ggtitle(paste(cancer_code, "TP Before"))
+	plotPCA(t(adjusted_counts)[, metadata$sample_type == "TP"]) + ggtitle(paste(cancer_code, "TP After"))
+	plotPCA(t(normalized_counts)[, metadata$sample_type == "NT"]) + ggtitle(paste(cancer_code, "NT Before"))
+	plotPCA(t(adjusted_counts)[, metadata$sample_type == "NT"]) + ggtitle(paste(cancer_code, "NT After"))
+}
+plotPCACancerType(luad_normalized_counts, luad_adjusted_counts, luad_metadata, "LUAD")
+plotPCACancerType(brca_normalized_counts, brca_adjusted_counts, brca_metadata, "BRCA")
+```
+
+
+```{r save-image}
+save(file = 'luad-counts.RData', luad_raw_counts, luad_normalized_counts)
+save(file = 'brca-counts.RData', brca_raw_counts, brca_normalized_counts)
+save(file = 'luad-metadata.RData', luad_metadata, luad_clinical)
+save(file = 'brca-metadata.RData', brca_metadata, brca_clinical)
 save.image("process-reads-image.RData")
 ```
