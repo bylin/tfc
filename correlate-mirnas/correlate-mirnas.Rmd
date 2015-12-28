@@ -13,10 +13,12 @@ library(stringr)
 library(gplots)
 library(GenomicRanges)
 library(BiocParallel)
+library(DESeq2)
 register(MulticoreParam(8)) # turn this off depending on your machine
 attach('/inside/grotto/blin/trna-markers/batch-effects/counts.RData')
 attach('/inside/grotto/blin/trna-markers/process-reads/prad-metadata.RData')
 attach('/inside/grotto/blin/trna-markers/feature-counts/features.RData')
+attach('/inside/grotto/blin/trna-markers/feature-counts/feature-counts.RData')
 ```
 
 The correlation will be performed on a matrix of fold changes. I'm not sure whether I should take the log<sub>2</sub> fold change before then. I do in this case, to minimize heteroscedasticity - reduce the variability between sub-populations, which in this case is individual genes or groups of genes. Since these are `log2` values, and there are fragments with counts of 0, we will use Laplacian smoothing (add a pseudocount of 1) to avoid `-Inf` values.
@@ -114,19 +116,36 @@ test_3_features <- rownames(normalized_counts)[which(sapply(test_3_results, func
 intersect(intersect(test_1_features, test_2_features), test_3_features)
 ```
 
+### DESeq2
+It's been empirically determined that reads for transcripts generally follow a negative binomial distribution, something that DESeq2 takes full advantage of. I will provide this analysis as well in an attempt to be exhaustive. `control_mirnas` is a list derived from [Zhan et al. 2014](http://www.sciencedirect.com/science/article/pii/S0006291X14017148). They looked at miRNA counts in TCGA to see which miRNAs were stable across normal and tumor samples, selecting 15 as candidate reference miRNAs for PRAD. I required that reference miRNAs are stable in at least one other cancer, trimming the list down to 8. 
+
+```{r deseq2}
+colData <- data.frame(row.names = colnames(feature_counts), condition = prad_metadata$sample_type, type = "single-read")  # feature count column names correspond to metadata rows
+control_mirnas <- match(c("hsa-miR-28-5p", "hsa-miR-99b-5p", "hsa-miR-29a-3p", "hsa-miR-30e-3p", "hsa-miR-30e-5p", "hsa-miR-99b-5p", "hsa-miR-101-3p", "hsa-miR-151a-3p"), features$tx_name)
+dds <- DESeqDataSetFromMatrix(countData = feature_counts, colData = colData, design = ~ condition)
+dds <- estimateSizeFactors(dds, controlGenes = control_mirnas)
+dds <- estimateDispersions(dds)
+dds <- nbinomWaldTest(dds)
+deseq_res <- results(dds)
+```
+
+```{r deseq2-results}
+head(res[order(res$padj), ]) # display high significance p-values
+```
 
 ### Cluster
 
 We can also cluster the features by their fold changes.
 
 ```{r clusters, run=FALSE}
-distance_matrix <- as.matrix(dist(t(fold_changes))) # Euclidean
+distance_matrix <- as.matrix(dist(t(fold_changes))) # Euclidean distance
 clusters <- hclust(distance_matrix)
 heatmap.2(distance_matrix, Rowv = as.dendrogram(clusters), symm = TRUE, trace = "none")
 ```
 
 ```{r save-image, echo=FALSE, cache=FALSE}
 save(file = 'fold-changes.RData', fold_changes)
+save(file = 'deseq-res.RData', res)
 save.image('correlate-mirnas-image.RData')
 ```
 

@@ -11,61 +11,76 @@ library(GenomicRanges)
 library(GenomicAlignments)
 library(Biobase)
 library(stringr)
+library(DESeq2)
+library(ggplot2)
 source('/inside/grotto/blin/programs/convertChrNames.R')
-attach('/inside/grotto/blin/trna-markers/process-reads/process-reads-image.RData')
+load('/inside/grotto/blin/trna-markers/process-reads/prad-metadata.RData')
 ```
 
 ## Building a features list
 
-### RNase Z dependent terminal tRNA fragments
+### tRFs
 
 Recently, [tRFdb](http://genome.bioch.virginia.edu/trfdb/) was released, with 552 human tRNA fragments. These were downloaded into `/inside/grotto/blin/data/tRFdb-human.tab`, and processed into a better file format, `tRFdb-human.gtf`. I can read this in and convert to a `GRanges` object.
 
 ```{r features-fragments}
-frags <- read.delim('tRFdb-human.gtf', comment.char = "#", header = FALSE, col.names = c("seqid", "source", "type", "start", "end", "score", "strand", "phase", "attributes"))
+frags <- read.delim('/inside/grotto/blin/data/tRFdb-human.gtf', comment.char = "#", header = FALSE, col.names = c("seqid", "source", "type", "start", "end", "score", "strand", "phase", "attributes"))
 frags$strand <- ifelse(frags$start - frags$end < 0, "+", "-")
 frags[frags$strand == "-", c("start", "end")] <- frags[frags$strand == "-", c("end", "start")]
 frags <- GRanges(seqnames = frags$seqid, ranges = IRanges(frags$start, frags$end), strand = ifelse(frags$start - frags$end < 0, "+", "-"), tx_name = paste0(str_extract(frags$attributes, "(chr.+trna\\d+-\\w+)"), "-", str_extract(frags$attributes, "\\d\\d\\d\\d\\w?")))
 mcols(frags)$class <- "tRF1"
 mcols(frags[str_detect(mcols(frags)$tx_name, "-3")])$class <- "tRF3"
 mcols(frags[str_detect(mcols(frags)$tx_name, "-5")])$class <- "tRF5"
+frags$tx_name <- str_match(unlist(str_split(frags$tx_name, "\\-", 2))[seq(2, length(frags)*2, 2)], "\\w+-\\d+")[, 1]
+frags <- frags[!duplicated(frags$tx_name)]
 frags <- convertChrNames(frags, "Ensembl")
 ```
 
+
+<!-- 
+TCGA miRNA-Seq protocol filters these out through size selection.
 ### Angiogenin dependent tRNA halves
 
 Andrew has generated a feature list (available at `/inside/grotto/blin/trna-markers/feature-counts/hg19-trnahalfs.gtf`), so we'll use that for now. It's stored as a `.gtf` file, so it follows a similar process as above. Currently, there is an issue with Andrew's covariance model that results in reversed 5' tRFs, with end = start - 1. For the time being, those features have been deleted from the list. This list 
 
-```{r features-halves}
+ features-halves}
 halves <- read.delim('hg19-trnahalves.gtf', header = FALSE, col.names = c("seqid", "source", "type", "start", "end", "score", "strand", "phase", "attributes"))
 halves <- GRanges(seqnames = halves$seqid, ranges = IRanges(halves$start, halves$end), strand = halves$strand, tx_name = str_extract(halves$attributes, "(tRNA|chr\\w+\\.\\w+|nmt)(-\\w+\\?*)+_(threehalf|fivehalf|trailer)"))
 mcols(halves)$class <- "trailer"
 mcols(halves[str_detect(mcols(halves)$tx_name, "threehalf")])$class <- "3half"
 mcols(halves[str_detect(mcols(halves)$tx_name, "fivehalf")])$class <- "5half"
 halves <- convertChrNames(halves, "Ensembl")
-```
+ -->
+
+### microRNAs
 
 I had what Aaron called an "A-list" of miRNAs involved in prostate cancer. These are now documented in [correlate-mirnas](correlate-mirnas.html). I am now following suggestions to just throw the entire human miRNA pool in and extracting what we need later.
 
 Combining the miRNAs with the tRFs is simple with `GRanges`. We just need to read them in first. The miRNAs are formatted as a bed file. In the interest of having a more complete set of data, I am using the entire miRNA primary transcript instead of miRNA levels.
 
 ```{r features-mirnas}
-mirnas <- read.delim('/inside/grotto/blin/data/mir-hsa-primary.gff3', header = FALSE, stringsAsFactors = FALSE, col.names = c("seqid", "source", "type", "start", "end", "score", "strand", "phase", "attributes"))
+mirnas <- read.delim('/inside/grotto/blin/data/mir-hsa.gff3', header = FALSE, stringsAsFactors = FALSE, comment.char = "#", col.names = c("seqid", "source", "type", "start", "end", "score", "strand", "phase", "attributes"))
 mirnas <- GRanges(seqnames = mirnas$seqid, ranges = IRanges(start = mirnas$start, end = mirnas$end), strand = mirnas$strand, tx_name = str_extract(mirnas$attributes, "hsa(-\\w+)+"))
 mirnas <- convertChrNames(mirnas, "Ensembl")
 mcols(mirnas)$class <- "miRNA"
-features <- c(frags, halves, mirnas)
+mirnas <- mirnas[!duplicated(mirnas$tx_name)]
+features <- c(frags, mirnas) 
 ```
+
+## Count features
+
+### Small RNA reads
 
 Reads for TCGA miRNA tend to be between 20-30 bp. If the overlap between a locus and a pair of reads is greater than or equal to 5 bp, we consider it one transcript spanning the feature. The following function is similar to the above, and returns a matrix with rows as features and columns as the sample. We don't need to divide the counts by feature length because miRNA sequencing is typically not fragmented prior to sequencing. 
 
 ```{r count-function}
 countFeaturesFromBam <- function(bamfiles, features, dir = ".") {
-  bamfiles <- paste0(dir, "/", bamfiles)
+  bamfiles <- paste0(dir, "/", bamfiles, "-mapped.bam")
   counts <- vector()
-  # use a for loop because r will run out of memory
+  # use for loop because r will run out of memory
   for (bamfile in bamfiles) {
   	sample <- readGAlignments(bamfile)
+    sample <- convertChrNames(sample, "Ensembl")
   	counts <- cbind(counts, countOverlaps(features, sample, minoverlap = 5))
   }
   counts
@@ -73,21 +88,141 @@ countFeaturesFromBam <- function(bamfiles, features, dir = ".") {
 ```
 
 ```{r count-features}
-feature_counts <- countFeaturesFromBam(prad_metadata$shortnames, features, '/inside/grotto/blin/trna-markers/mirna/prad')
+raw_counts <- countFeaturesFromBam(prad_metadata$shortnames, features, '/inside/grotto/blin/trna-markers/mirna/prad')
+rownames(raw_counts) <- features$tx_name
+colnames(raw_counts) <- prad_metadata$barcode
+raw_counts <- as.data.frame(raw_counts)
 ```
 
-```{r convert-ExpressionSet}
-rownames(feature_counts) <- mcols(features)$tx_name
-colnames(feature_counts) <- prad_metadata$barcode
-feature_counts <- as.data.frame(feature_counts)
-pheno_data <- AnnotatedDataFrame(data.frame(row.names = prad_metadata$barcode, sample_type = prad_metadata$sample_type))
-tRF_expression <- ExpressionSet(assayData = as.matrix(feature_counts), pheno_data = pheno_data) 
+### Gene counts
+
+Top 10 genes recommended by [this paper](http://link.springer.com/article/10.1007/s00109-005-0703-z) for prostate cancer housekeeping genes: HPRT1, ALAS1, K-ALPHA-1 (TUBA1B), SDHA, POLR2A, G6PD, GAPD (GAPDH), TBP, PPIA, YWHAZ
+
+Actually, I changed my mind - just going to grab all gene counts here.
+
+```{r process-rnaseq-files-function}
+getGeneCounts <- function(rnaseq_dir, rnaseq_metadata_filename, mirna_metadata) {
+  rnaseq_files <- list.files(rnaseq_dir, full.names = TRUE)
+  rnaseq_metadata <- read.delim(paste0(rnaseq_dir, rnaseq_metadata_filename), header = TRUE, stringsAsFactors = FALSE)
+  # split at character index 15, e.g. TCGA-ZG-A9N3-01
+  rnaseq_metadata <- data.frame(barcode = substr(rnaseq_metadata$Comment..TCGA.Barcode., 1, 15), analysis_id = rnaseq_metadata$Extract.Name, stringsAsFactors = FALSE)
+  counts <- vector()
+  for (barcode in mirna_metadata$barcode) {
+    barcode4 <- substr(barcode, 1, 15)
+    analysis_id <- rnaseq_metadata$analysis_id[match(barcode4, rnaseq_metadata$barcode)]
+    if (is.na(str_detect(rnaseq_files, analysis_id))) {
+    	counts <- cbind(counts, NA)
+    	next
+    }
+    gene_counts_file <- rnaseq_files[which(str_detect(rnaseq_files, analysis_id))]
+    gene_counts <- read.table(gene_counts_file, row.names = 1, check.names = TRUE, stringsAsFactors = FALSE, header = TRUE)
+    rownames(gene_counts) <- make.unique(str_replace(rownames(gene_counts), '\\|\\d+', ''))
+    gene_counts <- gene_counts[!grepl("\\?", rownames(gene_counts)), ]
+    gene_ids <- rownames(gene_counts)
+    gene_counts <- gene_counts$raw_count
+    names(gene_counts) <- gene_ids
+    counts <- cbind(counts, gene_counts)
+  }
+  colnames(counts) <- mirna_metadata$barcode
+  counts
+}
+``` 
+
+```{r get-gene-counts}
+gene_counts <- getGeneCounts('/inside/home/blin/grotto/trna-markers/datasets/prad/rnaseq/', 'unc.edu_PRAD.IlluminaHiSeq_RNASeqV2.1.16.0.sdrf.txt', prad_metadata)
+feature_counts <- rbind(raw_counts, gene_counts)
 ```
 
-This formats data a way that we can reference in later steps. We add feature names to `feature_counts` (this is not handled already) and convert to a data frame.
+## Cleaning and normalizing data 
+```{r clean-counts}
+feature_counts <- raw_counts
+feature_counts <- feature_counts[apply(feature_counts, 1, function(row) length(which(row > 0)) > length(colnames(feature_counts)) * 0.05), ] # no. of samples with reads mapping to this feature > no. samples * 0.05. at least 1/20 of the samples must have reads for this feature to be considered
+feature_counts <- feature_counts[apply(feature_counts, 1, function(row) sum(row, na.rm = TRUE) > 20), ]
+feature_counts <- feature_counts[!apply(feature_counts, 1, function(row) any(is.na(row))), ]
+```
 
-```{r save-image, echo=FALSE, cache=FALSE}
-save(file="feature-counts.RData", tRF_expression, feature_counts, features, prad_metadata)
+```{r normalize-counts}
+colData <- data.frame(row.names = colnames(feature_counts), patient = as.factor(prad_metadata$participant_id), sample_type = as.factor(prad_metadata$sample_type), type = "single-read") # feature count column names correspond to metadata rows
+deseq_prad_dds <- DESeqDataSetFromMatrix(countData = feature_counts, colData = colData, design = ~ sample_type)
+deseq_prad_dds <- DESeq(deseq_prad_dds)
+normalized_counts <- counts(deseq_prad_dds, normalized = TRUE) 
+deseq_prad <- results(deseq_prad_dds)
+```
+
+The below section is now deprecated, since we are no longer using gene counts for normalization.
+
+
+
+## Cleaning and normalizing data - DEPRECATED
+
+Now that we have all of the raw counts, we need to clean up the NAs and duplicated values, then normalize them.
+
+First things first, let's remove NA values (which happens when there is no corresponding RNA-Seq count data for housekeeping genes) and duplicated tsRNA/miRNA rows. Duplicates arise from different loci transcribing the same gene. We want to keep only 1 locus. We will also eliminate features that have 0 counts for over 95% of the samples. This means that for a tRF or miRNA to be considered in the analysis, the feature must have at least 20 reads and be expressed in at least 5% of samples. These filters are stricter than usual because reads can be mapped to multiple loci, so a sample with 10 mapped locations may really just be the same read mapped 10 times.
+
+DESeq2 estimates gene dispersions in a 3 step process. First, it considers individual genes, and looks at their dispersions across all samples. Second, it fits a curve to the individual gene dispersions. Third, it uses the curve as a prior to shrink the individual dispersions towards the curve. Thus, duplicated genes will affect the fitted curve, and subsequently the dispersion adjustments towards the prior.
+
+```{r clean-counts-deprecated, eval=FALSE}
+feature_counts <- feature_counts[apply(feature_counts, 1, function(row) length(which(row > 0)) > length(colnames(feature_counts)) * 0.05), ] # no. of samples with reads mapping to this feature > no. samples * 0.05. at least 1/20 of the samples must have reads for this feature to be considered
+feature_counts <- feature_counts[apply(feature_counts, 1, function(row) sum(row, na.rm = TRUE) > 20), ]
+feature_counts <- feature_counts[!apply(feature_counts, 1, function(row) any(is.na(row))), ]
+```
+
+## Differential expression and EDA
+
+### DESeq2
+
+```{r normalize-counts-deprecated, eval = FALSE}
+colData <- data.frame(row.names = colnames(raw_counts), patient = as.factor(prad_metadata$participant_id), sample_type = as.factor(prad_metadata$sample_type), type = "single-read") # feature count column names correspond to metadata rows
+deseq_prad_dds <- DESeqDataSetFromMatrix(countData = raw_counts, colData = colData, design = ~ sample_type)
+deseq_prad_dds <- DESeq(deseq_prad_dds)
+normalized_counts <- counts(deseq_prad_dds, normalized = TRUE) 
+deseq_prad <- results(deseq_prad_dds)
+```
+
+### Diagnostic plots
+
+```{r diagnostic-plots, fig.show='hold', out.width = "400px", fig.height = 3, fig.width = 5, eval = FALSE}
+df <- data.frame(fc = 2^(deseq_prad$log2FoldChange), pval = -log(deseq_prad$pvalue, 2))
+ggplot(df) + geom_point(aes(x = fc, y = pval)) + xlab("Fold change") + ylab("P-values (-log2)") + xlim(-0.5, 2.5) + ggtitle("Volcano plot")
+df <- data.frame(m = deseq_prad$log2FoldChange, a = log(rowMeans(normalized_counts), 2), significant = ifelse(deseq_prad$pvalue < 0.05, TRUE, FALSE))
+ggplot(df) + geom_point(aes(x = a, y = m, color = significant)) + geom_abline(intercept = 0, slope = 0, color = 2) + scale_color_manual(values = c(1,2), guide = FALSE) + xlab("Average expression (log2)") + ylab("Fold change (log2)") + ylim(-3, 3) + ggtitle("MA plot")
+ggplot(data.frame(padj = deseq_prad$padj)) + geom_histogram(aes(x = padj)) + xlab("Adjusted p-value") + ggtitle("Histogram of adjusted p-values")
+ggplot(data.frame(padj = with(deseq_prad, padj[padj < 0.05 & log2FoldChange >= 1]))) + geom_histogram(aes(x = padj)) + xlab("Adjusted p-value") + ggtitle("Histogram of adjusted p-values, filtered data")
+plotDispEsts(deseq_prad_dds)
+```
+
+### Batch effects
+
+```{r svd, eval = FALSE}
+svobj <- svd(normalized_counts - rowMeans(normalized_counts))
+```
+
+```{r svd-plots-1, fig.height = 5, fig.width = 8, eval = FALSE}
+batch <- as.factor(ifelse(!is.na(prad_clinical$batch), as.character(prad_clinical$batch), "Batch ?"))
+df <- data.frame(PC1 = svobj$v[, 1], PC2 = svobj$v[, 2], Batch = batch, sample_type = prad_metadata$sample_type, Gleason = as.factor(prad_clinical$gleason))
+ggplot(df) + geom_point(aes(x = PC1, y = PC2, color = Batch, shape = Batch, size = sample_type), alpha = 0.5) + scale_shape_manual(values = 1:19) + scale_size_manual(labels = c("NT", "TP"), values = c(5, 2)) + guides(color = guide_legend(ncol = 2), shape = guide_legend(ncol = 2), size = guide_legend(ncol = 2)) + xlim(-0.17, 0.06) + ylim(-0.05, 0.17) + ggtitle("SVD and PCA")
+
+ggplot(df) + geom_point(aes(x = PC1, y = PC2, color = Gleason, shape = sample_type), alpha = 0.5) + xlim(-0.17, 0.06) + ylim(-0.05, 0.17) + ggtitle("SVD and PCA")
+```
+
+
+```{r svd-plots-2, fig.height = 4, fig.width = 8, eval = FALSE}
+df <- data.frame(Score = t(cor(as.numeric(batch), svobj$v, method = "spearman")), PC = 1:dim(svobj$v)[1])
+ggplot(df) + geom_point(aes(x = PC, y = Score)) + ggtitle('Spearman correlation between batch and PCs')
+```
+
+## Test if gene counts are necessary for this analysis
+
+```{r all-feature-deseq, eval = FALSE}
+all_prad_dds <- DESeqDataSetFromMatrix(countData = feature_counts, colData = data.frame(row.names = colnames(raw_counts), patient = as.factor(prad_metadata$participant_id), sample_type = as.factor(prad_metadata$sample_type), type = "single-read"), design = ~ sample_type)
+all_prad_dds <- DESeq(all_prad_dds)
+plotDispEsts(all_prad_dds)
+
+```
+
+```{r save-image, echo=FALSE}
+save(file="feature-counts.RData", feature_counts, normalized_counts)
+save(file="prad-deseq.RData", deseq_prad)
 save(file="features.RData", features)
 save.image('feature-counts-image.RData')
 ```

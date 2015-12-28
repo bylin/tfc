@@ -14,6 +14,7 @@ library(ggplot2)
 library(BiocParallel)
 register(MulticoreParam(8)) # turn this off depending on your machine!
 attach('/inside/grotto/blin/trna-markers/feature-counts/feature-counts.RData')
+attach('/inside/grotto/blin/trna-markers/process-reads/prad-metadata.RData')
 ```
 
 TCGA data may contain batch effects that need to be removed. I normalize the data with [`DESeq2`](http://www.bioconductor.org/packages/release/bioc/html/DESeq2.html) and use the [`sva`](http://www.bioconductor.org/packages/release/bioc/html/sva.html) package to remove them.
@@ -38,6 +39,7 @@ We don't need the entire DESeq analysis pipeline. The only thing of interest is 
 normalized_counts <- t(t(feature_counts) / sizeFactors(dds)) # R applies vectors on columns (genes), we want R to apply them on rows (samples) for size factors
 ```
 
+<!-- old analysis, when i didn't have the batches and just used sva instead. 
 ## Surrogate variable analysis
 ```{r estimate-surrogate-variables}
 pheno_data <- data.frame(row.names = prad_metadata$barcode, sample_type = prad_metadata$sample_type)
@@ -59,6 +61,15 @@ removeBatchEffect <- function(counts, mod, svs) {
 
 ```{r remove-batch}
 batch_removed_counts <- removeBatchEffect(normalized_counts, mod, svobj$sv)
+```
+ -->
+
+## Remove batch effects
+```{r remove-batch-effects}
+pheno_data <- data.frame(row.names = prad_metadata$barcode, sample_type = prad_metadata$sample_type)
+mod <- model.matrix(~ 1, data = pheno_data)
+batch <- as.factor(ifelse(!is.na(prad_metadata$batch), as.character(prad_metadata$batch), "Batch Unknown"))
+batch_removed_counts <- ComBat(dat = normalized_counts, batch = batch, mod = mod)
 ```
 
 ## PCA
@@ -88,9 +99,22 @@ pca$sample_type <- prad_metadata$sample_type
 ggplot(pca, aes(x = PC1, y = PC2, color = sample_type)) + geom_point(shape = 1) + ggtitle("After")
 ```
 
-It doesn't look like removing surrogate variables is achieving a lot. I will just use the normalized counts instead.
+It doesn't look like ComBaT is achieving a lot. I will just use the normalized counts instead.
+
+## Differential expression
+
+I'll finish up the differential expression analysis here. But first, I'll remove the tRNA halves - I later found out that the TCGA protocol doesn't remove them.
+
+```{r differential-expression}
+tRF_normalized_counts <- normalized_counts[!features$class[match(rownames(normalized_counts), features$tx_name)] %in% c("miRNA", "5half", "3half"), ]
+colData <- data.frame(row.names = colnames(normalized_counts), condition = prad_metadata$sample_type, type = "single-read")  # feature count column names correspond to metadata rows
+dds <- DESeqDataSetFromMatrix(countData = normalized_counts, colData = colData, design = ~ condition)
+dds <- DESeq(dds)
+deseq_results <- results(dds)[order(results(dds)$padj), ]
+```
 
 ```{r save-image}
 save(file = "counts.RData", batch_removed_counts, normalized_counts)
+save(file = "deseq-results.RData", deseq_results)
 save.image("batch-effects-image.RData")
 ```

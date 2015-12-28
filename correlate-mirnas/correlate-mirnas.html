@@ -206,7 +206,7 @@ hr {
 <body>
 <h2>correlate-mirnas</h2>
 
-<p><em>Last modified 05:15 PM on Jan 14, 2015. This document, R session image, knitr cache, figures, and other associated datasets are located in <code>cruncher:/inside/grotto/blin/trna-markers/correlate-mirnas/</code>.</em></p>
+<p><em>Last modified 06:39 PM on Apr 03, 2015. This document, R session image, knitr cache, figures, and other associated datasets are located in <code>cruncher:/inside/grotto/blin/trna-markers/correlate-mirnas/</code>.</em></p>
 
 <pre><code class="r">library(reshape2)
 library(ggplot2)
@@ -214,10 +214,12 @@ library(stringr)
 library(gplots)
 library(GenomicRanges)
 library(BiocParallel)
+library(DESeq2)
 register(MulticoreParam(8)) # turn this off depending on your machine
 attach(&#39;/inside/grotto/blin/trna-markers/batch-effects/counts.RData&#39;)
 attach(&#39;/inside/grotto/blin/trna-markers/process-reads/prad-metadata.RData&#39;)
 attach(&#39;/inside/grotto/blin/trna-markers/feature-counts/features.RData&#39;)
+attach(&#39;/inside/grotto/blin/trna-markers/feature-counts/feature-counts.RData&#39;)
 </code></pre>
 
 <p>The correlation will be performed on a matrix of fold changes. I&#39;m not sure whether I should take the log<sub>2</sub> fold change before then. I do in this case, to minimize heteroscedasticity - reduce the variability between sub-populations, which in this case is individual genes or groups of genes. Since these are <code>log2</code> values, and there are fragments with counts of 0, we will use Laplacian smoothing (add a pseudocount of 1) to avoid <code>-Inf</code> values.</p>
@@ -369,11 +371,45 @@ test_3_features &lt;- rownames(normalized_counts)[which(sapply(test_3_results, f
 ## [53] &quot;chr18.numttRNA4-GlnCTG_threehalf&quot; &quot;hsa-mir-873&quot;
 </code></pre>
 
+<h3>DESeq2</h3>
+
+<p>It&#39;s been empirically determined that reads for transcripts generally follow a negative binomial distribution, something that DESeq2 takes full advantage of. I will provide this analysis as well in an attempt to be exhaustive.</p>
+
+<pre><code class="r">colData &lt;- data.frame(row.names = colnames(feature_counts), condition = prad_metadata$sample_type, type = &quot;single-read&quot;)  # feature count column names correspond to metadata rows
+dds &lt;- DESeqDataSetFromMatrix(countData = feature_counts, colData = colData, design = ~ condition)
+dds &lt;- DESeq(dds)
+res &lt;- results(dds)
+</code></pre>
+
+<pre><code class="r">head(res[order(res$padj), ]) # display high significance p-values
+</code></pre>
+
+<pre><code>## log2 fold change (MAP): condition TP vs NT 
+## Wald test p-value: condition TP vs NT 
+## DataFrame with 6 rows and 6 columns
+##                              baseMean log2FoldChange     lfcSE      stat
+##                             &lt;numeric&gt;      &lt;numeric&gt; &lt;numeric&gt; &lt;numeric&gt;
+## tRNA-Glu-TTC-1-1_fivehalf  1921.64192       2.383156 0.1864251  12.78345
+## tRNA-Glu-TTC-1-2_fivehalf  1922.41967       2.352845 0.1857901  12.66400
+## tRNA-Leu-CAG-1-4_threehalf   12.74848      -1.850042 0.1544224 -11.98040
+## tRNA-Gly-TCC-1-1_fivehalf    60.80732       1.811200 0.1520539  11.91157
+## chr17.trna5-GlyGCC-5004b   1130.42537       1.772876 0.1497533  11.83864
+## chr1.trna4-GlyCCC-5004b    1108.46260       1.838853 0.1557171  11.80893
+##                                  pvalue         padj
+##                               &lt;numeric&gt;    &lt;numeric&gt;
+## tRNA-Glu-TTC-1-1_fivehalf  2.028619e-37 4.304730e-34
+## tRNA-Glu-TTC-1-2_fivehalf  9.360988e-37 9.932008e-34
+## tRNA-Leu-CAG-1-4_threehalf 4.501669e-33 3.184181e-30
+## tRNA-Gly-TCC-1-1_fivehalf  1.030247e-32 5.465460e-30
+## chr17.trna5-GlyGCC-5004b   2.464020e-32 8.275377e-30
+## chr1.trna4-GlyCCC-5004b    3.509821e-32 8.275377e-30
+</code></pre>
+
 <h3>Cluster</h3>
 
 <p>We can also cluster the features by their fold changes.</p>
 
-<pre><code class="r">distance_matrix &lt;- as.matrix(dist(t(fold_changes))) # Euclidean
+<pre><code class="r">distance_matrix &lt;- as.matrix(dist(t(fold_changes))) # Euclidean distance
 clusters &lt;- hclust(distance_matrix)
 </code></pre>
 
