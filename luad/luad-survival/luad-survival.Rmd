@@ -1,0 +1,49 @@
+## luad-survival
+_Last modified `r format(Sys.time(), "%I:%M %p on %b %d, %Y")`. This document, R session image, knitr cache, figures, and other associated datasets are located in `cruncher:/inside/grotto/blin/trna-markers/luad/luad-survival/`._
+
+```{r setup, echo=FALSE, warning=FALSE, results=FALSE, message=FALSE, errors=FALSE, cache=FALSE}
+library(knitr)
+opts_chunk$set(cache = TRUE, cache.path = "/inside/grotto/blin/trna-markers/luad/luad-survival/cache/", eval = TRUE, echo = TRUE, warning = FALSE, results = FALSE, message = FALSE, autodep = TRUE, dev = "png", dpi = 300)
+```
+
+```{r libraries, cache=FALSE}
+library(survival)
+source('/inside/home/blin/lib/R/ggsurv.R')
+load('/inside/grotto/blin/trna-markers/more-cancers/luad-metadata.RData')
+load('/inside/grotto/blin/trna-markers/more-cancers/luad-counts.RData')
+```
+
+```{r km-plot, out.width = "400px", fig.show = "hold"}
+filtered_luad_clinical <- na.omit(luad_clinical[luad_clinical$sample_type != "NT" & luad_clinical$days_survived > 30 & luad_clinical$days_survived < 3000, ]) # get rid of NAs, remove normal samples (e.g. duplicates), and put the time period as 1 month - 8 years
+km_initial <- survfit(Surv(days_survived, vital_status) ~ 1, data = filtered_luad_clinical)
+ggsurv(km_initial) + theme_bw() + ggtitle("Kaplan-Meier plot")
+km_stage <- survfit(Surv(days_survived, vital_status) ~ t_stage, data = filtered_luad_clinical)
+ggsurv(km_stage) + theme_bw() + ggtitle("Kaplan-Meier plot grouped by T stage")
+km_gleason <- survfit(Surv(days_survived, vital_status) ~ smoker, data = filtered_luad_clinical)
+ggsurv(km_gleason) + theme_bw() + ggtitle("Kaplan-Meier plot grouped by smoking history")
+km_gleason <- survfit(Surv(days_survived, vital_status) ~ gender, data = filtered_luad_clinical)
+ggsurv(km_gleason) + theme_bw() + ggtitle("Kaplan-Meier plot grouped by gender")
+km_gleason <- survfit(Surv(days_survived, vital_status) ~ age, data = filtered_luad_clinical)
+ggsurv(km_gleason) + theme_bw() + ggtitle("Kaplan-Meier plot grouped by age group")
+table(luad_clinical$t_stage)
+table(luad_clinical$smoker)
+table(luad_clinical$gender)
+table(luad_clinical$age)
+```
+
+Now, to perform univariate survival analyses on known clinical covariates (age, cancer stage, gleason score) using the Cox proportional hazards model.
+
+```{r univariate-cox-regression-function}
+cox_stage <- coxph(Surv(days_survived, vital_status) ~ t_stage, data = filtered_luad_clinical)
+summary(cox_stage)
+cox_smoker <- coxph(Surv(days_survived, vital_status) ~ smoker, data = filtered_luad_clinical)
+summary(cox_smoker)
+cox_smoker <- coxph(Surv(days_survived, vital_status) ~ gender, data = filtered_luad_clinical)
+summary(cox_gender)
+cox_age <- coxph(Surv(days_survived, vital_status) ~ age, data = filtered_luad_clinical)
+summary(cox_age)
+```
+
+```{r save-image, cache=FALSE}
+save.image("luad-survival-image.RData")
+```

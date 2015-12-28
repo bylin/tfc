@@ -1,0 +1,173 @@
+## prad-signature
+_Last modified `r format(Sys.time(), "%I:%M %p on %b %d, %Y")`. This document, R session image, knitr cache, figures, and other associated datasets are located in `cruncher:/inside/grotto/blin/trna-markers/prad/prad-signature/`._
+
+```{r setup, echo=FALSE, warning=FALSE, results=FALSE, message=FALSE, errors=FALSE, cache=FALSE}
+library(knitr)
+opts_chunk$set(cache = TRUE, cache.path = "/inside/grotto/blin/trna-markers/prad/prad-signature/cache/", eval = TRUE, echo = TRUE, warning = FALSE, results = FALSE, message = FALSE, autodep = TRUE, dev = "png", dpi = 300)
+```
+
+```{r libraries}
+library(DESeq2)
+library(BiocParallel)
+register(MulticoreParam(10))
+library(stringr)
+library(ROCR)
+library(dplyr)
+load('/inside/grotto/blin/trna-markers/feature-counts/features.RData')
+load('/inside/grotto/blin/trna-markers/feature-counts/feature-counts.RData')
+load('/inside/grotto/blin/trna-markers/process-reads/prad-metadata.RData')
+```
+
+We want to make both miRNA and tsRNA signatures, and use them to predict cancer status (normal vs tumor). I am going to generate 100x2 of these signatures, then count the number of times the tsRNA signature AUC is higher than the miRNA signature AUC.
+
+There are four parts to one trial. First, we "setup" and create training and testing sets by randomly sampling data. Second, we perform differential expression and select top features. Since DESeq2 is slow, I am splitting this into two parts in order to accomodate future changes. Third, we train and test the signature. Lastly, we evalulate its performance.
+
+We need to split into training/testing sets. This split needs to have an appropriate number of normal and tumor samples.
+
+```{r setup-function}
+randomSamplePatients <- function(metadata) {
+	# sample pairs of samples first
+	paired_metadata <- metadata[metadata$paired, ]
+	paired_samples <- sample(as.factor(paired_metadata$participant_id), nrow(paired_metadata)/2)
+	# then sample single sample patients
+	unpaired_metadata <- metadata[!metadata$paired, ]
+	unpaired_samples <- sample(as.factor(unpaired_metadata$participant_id), nrow(unpaired_metadata)/2)
+	# combine patient ids
+	c(as.character(paired_samples), as.character(unpaired_samples))
+}
+setupTrainingTestingSets <- function() {
+  random_sample <- randomSamplePatients(prad_metadata)
+  training_counts <- feature_counts[, prad_metadata$participant_id %in% random_sample]
+  training_metadata <- prad_metadata[prad_metadata$participant_id %in% random_sample, ]
+  testing_counts <- normalized_counts[, !(prad_metadata$participant_id %in% random_sample)]
+  testing_metadata <- prad_metadata[!(prad_metadata$participant_id %in% random_sample), ]
+  list(training_counts = training_counts, training_metadata = training_metadata, testing_counts = testing_counts, testing_metadata = testing_metadata)
+}
+```
+
+```{r setup-training-testing-sets}
+ntrials <- 10
+set.seed(12)
+random_datasets <- lapply(1:ntrials, function(i) setupTrainingTestingSets())
+save(file = "/inside/grotto/blin/trna-markers/prad/prad-signature/trials/random-datasets.RData", random_datasets)
+```
+
+```{r differential-expression-function}
+runDESeq2 <- function(training_counts, training_metadata) {
+  colData <- data.frame(row.names = colnames(training_counts), patient = as.factor(training_metadata$participant_id), sample_type = as.factor(training_metadata$sample_type), type = "single-read") # feature count column names correspond to metadata rows
+  deseq_obj <- DESeqDataSetFromMatrix(countData = training_counts, colData = colData, design = ~ patient + sample_type)
+  deseq_obj <- estimateSizeFactors(deseq_obj)
+  deseq_obj <- estimateDispersions(deseq_obj)
+  deseq_obj <- nbinomWaldTest(deseq_obj)
+  deseq_obj
+}
+```
+
+```{r differential-expression}
+deseq_results <- lapply(random_datasets, function(datasets) runDESeq2(datasets$training_counts, datasets$training_metadata))
+save(file = "/inside/grotto/blin/trna-markers/prad/prad-signature/trials/deseq_results.RData", deseq_results)
+```
+
+```{r select-top-features-function}
+getTopFeatures <- function(deseq_res, features) {
+  top_features <- deseq_res[rownames(deseq_res) %in% features, ]
+  top_features <- top_features[order(top_features$padj), ]
+  sig_features <- rownames(top_features[which(top_features$padj < 0.05 & abs(top_features$log2FoldChange) > 1), ])
+  if (length(sig_features) >= 10) return(sig_features[1:10])
+  nremaining <- 10 - length(sig_features)
+  for (feature in top_features) {
+    if (feature %in% sig_features) next
+    sig_features <- c(sig_features, feature)
+    nremaining <- nremaining - 1
+    if (nremaining == 0) break
+  }
+  sig_features
+}
+```
+
+```{r select-top-features}
+top_features <- lapply(deseq_results, function(results) {
+  list(tRF = getTopFeatures(results, features$tx_name[features$class %in% c("tRF1", "tRF3", "tRF5")]),
+       miRNA = getTopFeatures(results, features[features$class == "miRNA"]))
+  })
+save("/inside/grotto/blin/trna-markers/prad/prad-signature/trials/top_features.RData")
+```
+
+TODO: Switch to PCA or LDA or something for feature selection.
+
+```{r fit-predict-function}
+fitPredictGlm <- function(datasets, top_features) {
+  training_counts <- datasets$training_counts
+  training_metadata <- datasets$training_metadata
+  testing_counts <- datasets$testing_counts
+  testing_metadata <- datasets$testing_metadata
+  x <- data.frame(sample_type = as.factor(training_metadata$sample_type), t(training_counts[top_features, ]))
+  fit <- glm(as.formula(paste("sample_type ~ ", paste0(make.names(top_features), collapse = ' + '))), data = x, family = "binomial") # binomial family specifies logistic regression, for NT vs TP
+  testing_counts_features <- as.data.frame(t(testing_counts[top_features, ])) # need to isolate just the top features for prediction
+  colnames(testing_counts_features) <- make.names(top_features)
+  predicted <- predict(fit, newdata = testing_counts_features, se.fit = TRUE)
+  prob <- prediction(predicted$fit, testing_metadata$sample_type)
+  performance <- performance(prob, "tpr", "fpr")
+  roc <- data.frame(TPR = unlist(performance@y.values), FPR = unlist(performance@x.values))
+  performance <- performance(prob, "auc")
+  auc <- unlist(performance@y.values)
+  list(roc = roc, auc = auc)
+}
+```
+
+```{r fit-predict}
+comparisons <- lapply(1:ntrials, function(i) {
+  tRF_results <- fitPredictGlm(random_datasets[[i]], top_features[[i]]$tRF)
+  miRNA_results <- fitPredictGlm(random_datasets[[i]], top_features[[i]]$miRNA)
+  roc <- rbind(cbind(tRF_results$roc, "tRF"), cbind(miRNA_results$roc, "miRNA"))
+  list(roc = roc, tRF_auc = tRF_results$auc, miRNA_auc = miRNA_results$auc)
+  })
+save("/inside/grotto/blin/trna-markers/prad/prad-signature/trials/glm-performance.RData", comparisons)
+```
+
+```{r plot-glm-summary}
+avg_roc <- data.frame(TPR = rowMeans(sapply(comparisons, function(trial) trial$roc$TPR)),
+                      FPR = rowMeans(sapply(comparisons, function(trial) trial$roc$FPR)),
+                      Signature = sapply(comparisons, function(trial) trial$roc$Signature)[, 1])
+tRF_avg_auc <- mean(sapply(comparisons, function(trial) trial$tRF_auc))
+miRNA_avg_auc <- mean(sapply(comparisons, function(trial) trial$miRNA_auc))
+plot <- ggplot(roc) + geom_line(aes(x = FPR, y = TPR, color = Signature)) + geom_abline(intercept = 0, slope = 1, colour = "gray") + ylab("TPR") + xlab("FPR") + scale_color_discrete(name = "Signature", labels = c(paste0("tRF (AUC = ", round(tRF_avg_auc, 3), ")"), paste0("miRNA (AUC = ", round(miRNA_avg_auc, 3), ")"))) + theme_bw() 
+```
+
+
+```{r lm, eval = FALSE, echo = FALSE}
+x <- data.frame(sample_type = as.factor(training_metadata$sample_type), t(training_counts[top_tRFs, ]))
+tRF_glm <- glm(as.formula(paste("sample_type ~ ", paste0(make.names(top_tRFs), collapse = ' + '))), data = x, family = "binomial") 
+x <- data.frame(sample_type = as.factor(training_metadata$sample_type), t(training_counts[top_miRNAs, ]))
+miRNA_glm <- glm(as.formula(paste("sample_type ~ ", paste0(make.names(top_miRNAs), collapse = ' + '))), data = x, family = "binomial")
+```
+
+```{r predict, eval = FALSE, echo = FALSE}
+testing_counts_tRFs <- as.data.frame(t(testing_counts[top_tRFs, ]))
+colnames(testing_counts_tRFs) <- make.names(top_tRFs)
+predicted <- predict(tRF_glm, newdata = testing_counts_tRFs, se.fit = TRUE)
+prob <- prediction(predicted$fit, testing_metadata$sample_type)
+performance <- performance(prob, "tpr", "fpr")
+roc <- data.frame(TPR = unlist(performance@y.values), FPR = unlist(performance@x.values), Signature = "tRF")
+tRF_auc <- performance(prob, "auc")
+tRF_auc <- unlist(tRF_auc@y.values)
+
+testing_counts_miRNAs <- as.data.frame(t(testing_counts[top_miRNAs, ]))
+colnames(testing_counts_miRNAs) <- make.names(top_miRNAs)
+predicted <- predict(miRNA_glm, newdata = testing_counts_miRNAs, type = "response", se.fit = TRUE)
+prob <- prediction(predicted$fit, testing_metadata$sample_type)
+performance <- performance(prob, "tpr", "fpr")
+roc <- rbind(roc, data.frame(TPR = unlist(performance@y.values), FPR = unlist(performance@x.values), Signature = "miRNA"))
+miRNA_auc <- performance(prob, "auc")
+miRNA_auc <- unlist(miRNA_auc@y.values)
+
+plot <- ggplot(roc) + geom_line(aes(x = FPR, y = TPR, color = Signature)) + geom_abline(intercept = 0, slope = 1, colour = "gray") + ylab("TPR") + xlab("FPR") + scale_color_discrete(name = "Signature", labels = c(paste0("tRF (AUC = ", round(tRF_auc, 3), ")"), paste0("miRNA (AUC = ", round(miRNA_auc, 3), ")"))) + theme_bw() 
+```
+
+```{r plot-roc, fig.show = "hold", fig.height = 4, fig.width = 7, eval = FALSE, echo = FALSE}
+plot
+```
+
+```{r save-image, cache=FALSE}
+save.image("prad-signature-image.RData")
+```

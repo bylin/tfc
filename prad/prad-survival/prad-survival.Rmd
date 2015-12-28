@@ -1,0 +1,46 @@
+## Survival analysis in PRAD
+_Last modified `r format(Sys.time(), "%I:%M %p on %b %d, %Y")`. This document, R session image, knitr cache, figures, and other associated datasets are located in `cruncher:/inside/grotto/blin/trna-markers/prad/prad-survival/`._
+
+```{r setup, echo=FALSE, warning=FALSE, results=FALSE, message=FALSE, errors=FALSE, cache=FALSE}
+library(knitr)
+opts_chunk$set(cache = TRUE, cache.path = "/inside/grotto/blin/trna-markers/prad/prad-survival/cache/", eval = TRUE, echo = TRUE, warning = FALSE, results = FALSE, message = FALSE, autodep = TRUE, dev = "png", dpi = 300)
+```
+
+```{r libraries, cache=FALSE}
+library(survival)
+source('/inside/home/blin/lib/R/ggsurv.R')
+load('/inside/grotto/blin/trna-markers/feature-counts/feature-counts.RData')
+load('/inside/grotto/blin/trna-markers/process-reads/prad-metadata.RData')
+```
+
+```{r km-plot, out.width = "400px", fig.show = "hold"}
+filtered_prad_clinical <- na.omit(prad_clinical[prad_clinical$sample_type != "NT" & prad_clinical$days_survived > 30 & prad_clinical$days_survived < 3000, ]) # get rid of NAs, remove normal samples (e.g. duplicates), and put the time period as 1 month - 8 years
+km_initial <- survfit(Surv(days_survived, vital_status) ~ 1, data = filtered_prad_clinical)
+ggsurv(km_initial) + theme_bw() + ggtitle("Kaplan-Meier plot")
+km_stage <- survfit(Surv(days_survived, vital_status) ~ pathologic_T, data = filtered_prad_clinical)
+ggsurv(km_stage) + theme_bw() + ggtitle("Kaplan-Meier plot grouped by stage")
+km_gleason <- survfit(Surv(days_survived, vital_status) ~ gleason_score, data = filtered_prad_clinical)
+ggsurv(km_gleason) + theme_bw() + ggtitle("Kaplan-Meier plot grouped by Gleason score")
+table(prad_clinical$pathologic_T)
+table(prad_clinical$gleason_score)
+```
+
+Now, to perform univariate survival analyses on known clinical covariates (age, cancer stage, gleason score) using the Cox proportional hazards model.
+
+```{r univariate-cox-regression-function}
+cox_age <- coxph(Surv(days_survived, vital_status) ~ age, data = filtered_prad_clinical)
+summary(cox_age)
+cox_stage <- coxph(Surv(days_survived, vital_status) ~ pathologic_T, data = filtered_prad_clinical)
+summary(cox_stage)
+cox_gleason <- coxph(Surv(days_survived, vital_status) ~ gleason_score, data = filtered_prad_clinical)
+summary(cox_gleason)
+```
+
+This isn't working. We only have 6 deaths, so there is not enough information.
+
+
+
+
+```{r save-image}
+save.image("prad-survival-image.RData")
+```

@@ -1,0 +1,60 @@
+## prad-lasso
+_Last modified `r format(Sys.time(), "%I:%M %p on %b %d, %Y")`. This document, R session image, knitr cache, figures, and other associated datasets are located in `cruncher:/inside/grotto/blin/trna-markers/prad/prad-lasso/`._
+
+```{r setup, echo=FALSE, warning=FALSE, results=FALSE, message=FALSE, errors=FALSE, cache=FALSE}
+library(knitr)
+opts_chunk$set(cache = TRUE, cache.path = "/inside/grotto/blin/trna-markers/prad/prad-lasso/cache/", eval = TRUE, echo = TRUE, warning = FALSE, results = FALSE, message = FALSE, autodep = TRUE, dev = "png", dpi = 300)
+```
+
+```{r libraries, cache=FALSE}
+library(glmnet)
+load('/inside/grotto/blin/trna-markers/feature-counts/features.RData')
+load('/inside/grotto/blin/trna-markers/feature-counts/feature-counts.RData')
+load('/inside/grotto/blin/trna-markers/process-reads/prad-metadata.RData')
+load('/inside/grotto/blin/trna-markers/prad/prad-signature/trials/random-datasets.RData')
+```
+
+We want to make both miRNA and tsRNA signatures, and use them to predict cancer status (normal vs tumor). I am going to generate 100x2 of these signatures, then count the number of times the tsRNA signature AUC is higher than the miRNA signature AUC.
+
+This is slightly different from [prad-signature](../prad-signature/prad-signature.html). Instead of differential expression and fold change, I will use LASSO to select features. I still need to separate into training and testing sets, though.
+
+```{r setup-function}
+randomSamplePatients <- function(metadata) {
+	# sample pairs of samples first
+	paired_metadata <- metadata[metadata$paired, ]
+	paired_samples <- sample(as.factor(paired_metadata$participant_id), nrow(paired_metadata)/2)
+	# then sample single sample patients
+	unpaired_metadata <- metadata[!metadata$paired, ]
+	unpaired_samples <- sample(as.factor(unpaired_metadata$participant_id), nrow(unpaired_metadata)/2)
+	# combine patient ids
+	c(as.character(paired_samples), as.character(unpaired_samples))
+}
+setupTrainingTestingSets <- function() {
+  random_sample <- randomSamplePatients(prad_metadata)
+  training_counts <- feature_counts[, prad_metadata$participant_id %in% random_sample]
+  training_metadata <- prad_metadata[prad_metadata$participant_id %in% random_sample, ]
+  testing_counts <- normalized_counts[, !(prad_metadata$participant_id %in% random_sample)]
+  testing_metadata <- prad_metadata[!(prad_metadata$participant_id %in% random_sample), ]
+  list(training_counts = training_counts, training_metadata = training_metadata, testing_counts = testing_counts, testing_metadata = testing_metadata)
+}
+```
+
+```{r setup-training-testing-sets}
+ntrials <- 100
+set.seed(12)
+random_datasets <- lapply(1:ntrials, function(i) {
+	if (i %% 10 == 0) system(paste("echo", i, "of", ntrials, "trials"))
+	setupTrainingTestingSets()
+	})
+save(file = "random-datasets.RData", random_datasets)
+```
+
+```{r run-lasso-function}
+runLasso <- function() {
+	sdf
+}
+```
+
+```{r save-image, cache=FALSE}
+save.image("prad-lasso-image.RData")
+```
