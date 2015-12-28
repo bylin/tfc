@@ -1,8 +1,9 @@
 *.md
 *.rdb
 *.bam
+*.rdx
 *.RData
-*.RHistory
+*.Rhistory
 *.tab
 *.txt
 *.swp
