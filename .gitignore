@@ -1,4 +1,10 @@
-*
-!*.Rmd
-!*/figure/*.png
-!.gitignore
+*.md
+*.rdb
+*.bam
+*.RData
+*.tab
+*.txt
+*.swp
+*.results
+*.gto
+*_*
