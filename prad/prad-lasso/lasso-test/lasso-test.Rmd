@@ -1,0 +1,175 @@
+## lasso-test
+_Last modified `r format(Sys.time(), "%I:%M %p on %b %d, %Y")`. This document, R session image, knitr cache, figures, and other associated datasets are located in `cruncher:/inside/grotto/blin/trna-markers/prad/prad-lasso/lasso-test/`._
+
+```{r setup, echo=FALSE, warning=FALSE, results=FALSE, message=FALSE, errors=FALSE, cache=FALSE}
+library(knitr)
+opts_chunk$set(cache = TRUE, cache.path = "/inside/grotto/blin/trna-markers/prad/prad-lasso/lasso-test/cache/", eval = TRUE, echo = TRUE, warning = FALSE, results = FALSE, message = FALSE, autodep = TRUE, dev = "png", dpi = 300)
+```
+
+```{r libraries, cache=FALSE}
+library(gelnet)
+library(ROCR)
+```
+
+Starting with test set #1:
+
+```{r load}
+load('../random-datasets.RData')
+r <- random_datasets[[24]]
+counts <- r$training_counts
+response <- r$training_metadata$sample_type
+dim(counts)
+length(response) 
+X <- t(counts)
+```
+
+- okay, i don't remember what i was doing here, but I belive gelnet is supposed to select features using elastic nets. elastic nets combine L1 (lasso) and L2 (ridge). then, we test the selected features in two ways. what i didn't understand was gelnet also builds a model using the features and these features can be recovered using plogis. but at least i compared the two approaches:
+	- 1) discard feature coefficients. using the features selected by gelnet, build a glm, combine glm with testing data using linear algebra (e.g. make predictions), and test accuracy on testing data.
+	- 2) combine probabilities (coefficients) learned from gelnet model with the testing data (e.g. make predictions), test accuracy on testing data.
+- it looks like both approaches worked. arguably, the gelnet model is better since it avoids overfitting, as you would get with a glm without regularization. This problem is somewhat alleviated by selecting features first, but the coefficients would be overfitted.
+
+```{r gelnet, warning=FALSE, message=FALSE}
+obj <- gelnet.logreg(X, response, 1, 0)
+obj$w[which(obj$w != 0)]
+```
+
+I assume these are the tsRNAs/coefficients then.
+
+wait... how am i gonna test this later??
+
+
+```{r load2}
+testcounts <- r$testing_counts[, 1:25]
+testmeta <- r$testing_metadata$sample_type[1:25]
+```
+
+```{r predict-with-fit}
+top <- names(obj$w[obj$w != 0])
+top_counts <- as.data.frame(t(counts[top, ])) 
+x <- data.frame(sample_type = as.factor(response), top_counts)
+myglm <- glm(as.formula(paste("sample_type ~ ", paste0(make.names(top), collapse = " + "))), data = x, family = "binomial")
+top_counts_test <- as.data.frame(t(testcounts[top, ]))
+colnames(top_counts_test) <- make.names(top)
+p1 <- predict(myglm, newdata = top_counts_test, se.fit = TRUE)
+prob1 <- prediction(p1$fit, testmeta)
+perf1 <- performance(prob1, "tpr", "fpr")
+roc <- data.frame(TPR = unlist(perf1@y.values), FPR = unlist(perf1@x.values), Signature = "Sig1")
+```
+
+```{r predict-with-lasso-coef}
+x <- data.frame(sample_type = as.factor(testmeta), top_counts_test)
+m <- model.matrix(as.formula(paste("sample_type ~ ", paste0(make.names(top), collapse = " + "))), x)
+p2 <- plogis(obj$w[which(obj$w != 0)] %*% t(m[, -1]))
+prob2 <- prediction(as.vector(p2), testmeta)
+perf2 <- performance(prob2, "tpr", "fpr")
+roc <- rbind(roc, data.frame(TPR = unlist(perf2@y.values), FPR = unlist(perf2@x.values), Signature = "Sig2"))
+```
+
+
+```{r compare, fig.width=8, fig.height=4}
+auc1 <- unlist(performance(prob1, "auc")@y.values)
+auc2 <- unlist(performance(prob2, "auc")@y.values)
+auc1
+auc2
+plot <- ggplot(roc) + geom_line(aes(x = FPR, y = TPR, color = Signature)) + geom_abline(intercept = 0, slope = 1, colour = "gray") + ylab("TPR") + xlab("FPR") + scale_color_discrete(name = "Signature", labels = c(paste0("Sig1 (AUC = ", round(auc1, 3), ")"), paste0("Sig2 (AUC = ", round(auc2, 3), ")"))) + theme_bw()
+plot
+```
+
+time to cram into a function...
+
+```{r function}
+buildtest <- function(r, l1) {
+	counts <- r$training_counts
+	response <- r$training_metadata$sample_type
+	dim(counts)
+	length(response)
+	X <- t(counts)
+
+	obj <- gelnet.logreg(X, response, l1, 0)
+	obj$w[which(obj$w != 0)]
+
+	testcounts <- r$testing_counts[, 1:25]
+	testmeta <- r$testing_metadata$sample_type[1:25]
+	top <- names(obj$w[obj$w != 0])
+	top_counts <- as.data.frame(t(counts[top, ]))
+	x <- data.frame(sample_type = as.factor(response), top_counts)
+	myglm <- glm(as.formula(paste("sample_type ~ ", paste0(make.names(top), collapse = " + "))), data = x, family = "binomial")
+	top_counts_test <- as.data.frame(t(testcounts[top, ]))
+	colnames(top_counts_test) <- make.names(top)
+	p1 <- predict(myglm, newdata = top_counts_test, se.fit = TRUE)
+	prob1 <- prediction(p1$fit, testmeta)
+	perf1 <- performance(prob1, "tpr", "fpr")
+	roc <- data.frame(TPR = unlist(perf1@y.values), FPR = unlist(perf1@x.values), Signature = "Sig1")
+	x <- data.frame(sample_type = as.factor(testmeta), top_counts_test)
+	m <- model.matrix(as.formula(paste("sample_type ~ ", paste0(make.names(top), collapse = " + "))), x)
+	p2 <- plogis(obj$w[which(obj$w != 0)] %*% t(m[, -1]))
+	prob2 <- prediction(as.vector(p2), testmeta)
+	perf2 <- performance(prob2, "tpr", "fpr")
+	roc <- rbind(roc, data.frame(TPR = unlist(perf2@y.values), FPR = unlist(perf2@x.values), Signature = "Sig2"))
+	auc1 <- unlist(performance(prob1, "auc")@y.values)
+	auc2 <- unlist(performance(prob2, "auc")@y.values)
+	auc1
+	auc2
+	plot <- ggplot(roc) + geom_line(aes(x = FPR, y = TPR, color = Signature)) + geom_abline(intercept = 0, slope = 1, colour = "gray") + ylab("TPR") + xlab("FPR") + scale_color_discrete(name = "Signature", labels = c(paste0("Sig1 (AUC = ", round(auc1, 3), ")"), paste0("Sig2 (AUC = ", round(auc2, 3), ")"))) + theme_bw()
+	print(paste("Correlation b/t p1 and p2: ", cor(p1$fit, as.vector(p2))))
+	print(paste("Correlation b/t p2 and labels: ", cor(as.vector(p2), as.numeric(as.factor(testmeta)))))
+	plot
+}
+```
+
+```{r trials, fig.width=8, fig.height=4, out.height="300px"}
+buildtest(random_datasets[[1]], 0)
+buildtest(random_datasets[[2]], 1)
+buildtest(random_datasets[[3]], 2)
+buildtest(random_datasets[[4]], 3)
+buildtest(random_datasets[[5]], 4)
+buildtest(random_datasets[[6]], 5)
+```
+
+p1 and p2 seem to match each other pretty well, and they correlate:
+
+```{r correlate}
+cor(p1$fit, as.vector(p2))
+cor(as.vector(p2), as.numeric(as.factor(testmeta)))
+```
+
+so it may not matter which one I choose later. The predictions made seem to be working, the probability seems to also correlate with TP/NT (!!!).
+
+
+This performance seems to be too amazing. Maybe I'll do a couple of these with a random set of top tsRNAs...hidden `buildtest2` below
+
+```{r buildtest2, echo=FALSE}
+
+buildtest2 <- function(r, l1) {
+	counts <- r$training_counts
+	response <- r$training_metadata$sample_type
+	dim(counts)
+	length(response)
+	X <- t(counts)
+
+
+	testcounts <- r$testing_counts[, 1:25]
+	testmeta <- r$testing_metadata$sample_type[1:25]
+	top <- rownames(counts)[sample(1:25, 9)]
+	top_counts <- as.data.frame(t(counts[top, ]))
+	x <- data.frame(sample_type = as.factor(response), top_counts)
+	myglm <- glm(as.formula(paste("sample_type ~ ", paste0(make.names(top), collapse = " + "))), data = x, family = "binomial")
+	top_counts_test <- as.data.frame(t(testcounts[top, ]))
+	colnames(top_counts_test) <- make.names(top)
+	p1 <- predict(myglm, newdata = top_counts_test, se.fit = TRUE)
+	prob1 <- prediction(p1$fit, testmeta)
+	perf1 <- performance(prob1, "tpr", "fpr")
+	roc <- data.frame(TPR = unlist(perf1@y.values), FPR = unlist(perf1@x.values), Signature = "Sig1")
+	auc1 <- unlist(performance(prob1, "auc")@y.values)
+	plot <- ggplot(roc) + geom_line(aes(x = FPR, y = TPR, color = Signature)) + geom_abline(intercept = 0, slope = 1, colour = "gray") + ylab("TPR") + xlab("FPR") + scale_color_discrete(name = "Signature", labels = c(paste0("Sig1 (AUC = ", round(auc1, 3), ")"))) + theme_bw()
+	print(paste("Correlation b/t p1 and labels: ", cor(p1$fit, as.numeric(as.factor(testmeta)))))
+	plot
+}
+```
+
+```{r test-random, fig.width=8, fig.height=4, out.height="200px"}
+buildtest2(random_datasets[[1]], 0)
+buildtest2(random_datasets[[2]], 1)
+buildtest2(random_datasets[[3]], 2)
+buildtest2(random_datasets[[4]], 3)
+```
