@@ -132,6 +132,7 @@ countFeaturesFromBam <- function(metadata, features, dir = ".") {
     row <- metadata[i, ]
     system(paste("echo Counting sRNAs from", row$shortnames))
     bamfile <- paste0(dir, "/", row$shortnames, "-mapped.bam")
+    if (! file.exists(bamfile)) next
     sample <- readGAlignments(bamfile)
     sample <- convertChrNames(sample, "Ensembl")
     sample_counts <- data.frame(countOverlaps(features, sample, minoverlap = 5))
@@ -158,7 +159,7 @@ save(file = 'brca-counts.RData', brca_raw_counts)
 ```
 
 ```{r count-features-prad}
-brca_raw_counts <- countFeaturesFromBam(prad_metadata, features, '/inside/grotto/blin/trna-markers/datasets/prad/')
+prad_raw_counts <- countFeaturesFromBam(prad_metadata, features, '/inside/grotto/blin/trna-markers/datasets/prad/')
 save(file = 'prad-counts.RData', prad_raw_counts)
 ```
 
@@ -187,13 +188,16 @@ MA plots are log mean of counts (x axis) vs log fold change (y axis). But we don
 
 ```{r normalization-ma, fig.height=4, fig.width=3, fig.show='hold'}
 plotMA <- function(raw_counts, normalized_counts, metadata) {
-  df <- data.frame(log2FC = log(apply(raw_counts[, metadata[metadata$sample_type == "TP", ]$barcode], 1, mean), 2) - log(apply(raw_counts[, metadata[metadata$sample_type == "NT", ]$barcode], 1, mean), 2),
-                   counts = (apply(raw_counts[, metadata[metadata$sample_type == "TP", ]$barcode], 1, mean) + apply(raw_counts[, metadata[metadata$sample_type == "NT", ]$barcode], 1, mean))/2,
-                   normalized = FALSE)
-  df <- rbind(df, data.frame(log2FC = log(apply(normalized_counts[, metadata[metadata$sample_type == "TP", ]$barcode], 1, mean), 2) - log(apply(normalized_counts[, metadata[metadata$sample_type == "NT", ]$barcode], 1, mean), 2),
-                   counts = (apply(normalized_counts[, metadata[metadata$sample_type == "TP", ]$barcode], 1, mean) + apply(normalized_counts[, metadata[metadata$sample_type == "NT", ]$barcode], 1, mean))/2,
-                   normalized = TRUE))
-  ggplot(df) + geom_point(x = counts, y = log2FC) + geom_hline(yintercept = 0, color = "red") + facet_wrap(~ normalized)
+  tp_barcodes <- metadata[metadata$sample_type == "TP" & metadata$barcode %in% colnames(normalized_counts), ]$barcode
+  nt_barcodes <- metadata[metadata$sample_type == "NT" & metadata$barcode %in% colnames(normalized_counts), ]$barcode
+  # just use pseudocounts - this is just diagnostic and not used in actual data.
+  raw_tp_counts <- rowMeans(raw_counts[, tp_barcodes]) + 1
+  raw_nt_counts <- rowMeans(raw_counts[, nt_barcodes]) + 1
+  tp_counts <- rowMeans(normalized_counts[, tp_barcodes]) + 1
+  nt_counts <- rowMeans(normalized_counts[, nt_barcodes]) + 1
+  df <- rbind(data.frame(log2FC = log2(raw_tp_counts) - log2(raw_nt_counts), counts = log2((raw_tp_counts + raw_nt_counts)/2), normalized = FALSE),
+              data.frame(log2FC = log2(tp_counts) - log2(nt_counts), counts = log2((tp_counts + nt_counts)/2), normalized = TRUE))
+  ggplot(df) + geom_point(aes(x = counts, y = log2FC)) + geom_hline(yintercept = 0, color = "red") + facet_wrap(~ normalized)
 }
 plotMA(luad_raw_counts, luad_normalized_counts, luad_metadata)
 plotMA(brca_raw_counts, brca_normalized_counts, brca_metadata)
@@ -209,7 +213,7 @@ processClinicalDataFile <- function(biotab_file, batch_file) {
   batches <- read.table(batch_file, header = TRUE, sep = "\t", as.is = c(FALSE, TRUE))
   biotab$bcr_patient_uuid <- tolower(biotab$bcr_patient_uuid) # all data file ids are in lowercase, not sure if matters
   biotab$days_survived <- replace(biotab$death_days_to, biotab$death_days_to == "[Not Applicable]", biotab$last_contact_days_to[which(biotab$death_days_to == "[Not Applicable]")]) # either days from initial prognosis to death or initial prognosis to censor time
-  biotab$batch <- batches[match(biotab$bcr_patient_barcode, batches$barcode), "batch"]
+  biotab$batch <- batches[match(biotab$bcr_patient_barcode, substr(batches$barcode, 1, 12)), "batch"]
   biotab
 }
 luad_clinical <- processClinicalDataFile('luad-clinical-biotab-04032015.tab', 'luad-clinical-batches-04032015.tab')
@@ -259,14 +263,15 @@ prad_clinical <- with(prad_clinical[match(prad_metadata$participant_id, prad_cli
 
 ```{r batch-effects}
 removeBatchEffects <- function(metadata, counts) {
-  pheno_data <- data.frame(row.names = metadata$barcode, sample_type = metadata$sample_type)
-  mod <- model.matrix(~ 1, data = pheno_data)
-  batch <- as.factor(ifelse(!is.na(metadata$batch), as.character(metadata$batch), "Batch Unknown"))
+  mod <- model.matrix(~ sample_type, data = metadata)
+  mod <- mod[!is.na(metadata$batch), ]
+  counts <- counts[, -which(is.na(metadata$batch))]
+  batch <- as.factor(as.character(metadata$batch[!is.na(metadata$batch)]))
   ComBat(dat = counts, batch = batch, mod = mod)
 }
-luad_adjusted_counts <- removeBatchEffects(luad_metadata, luad_normalized_counts)
-brca_adjusted_counts <- removeBatchEffects(brca_metadata, brca_normalized_counts)
-prad_adjusted_counts <- removeBatchEffects(prad_metadata, prad_normalized_counts)
+luad_adjusted_counts <- removeBatchEffects(luad_clinical, luad_normalized_counts)
+brca_adjusted_counts <- removeBatchEffects(brca_clinical, brca_normalized_counts)
+prad_adjusted_counts <- removeBatchEffects(prad_clinical, prad_normalized_counts)
 ```
 
 ```{r pca, fig.show="hold", out.width="400px", fig.width=4, fig.height=3}
