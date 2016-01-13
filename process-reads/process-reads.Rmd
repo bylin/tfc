@@ -275,25 +275,36 @@ brca_adjusted_counts <- removeBatchEffects(brca_clinical, brca_normalized_counts
 prad_adjusted_counts <- removeBatchEffects(prad_clinical, prad_normalized_counts) 
 ```
 
-```{r pca, fig.show="hold", fig.width=12, fig.height=5}
+```{r pca-function}
 plotPCA <- function(normalized_counts, adjusted_counts, metadata) {
   pca_before <- prcomp(t(normalized_counts), scale = TRUE)
   pca_after <- prcomp(t(adjusted_counts), scale = TRUE)
-  df <- rbind(data.frame(PC1 = pca_before$x[, 1], PC2 = pca_before$x[, 2], adjusted = "Adjusted"), data.frame(PC1 = pca_after$x[, 1], PC2 = pca_after$x[, 2], adjusted = "Not adjusted"))
+  df <- rbind(data.frame(PC1 = pca_before$x[, 1], PC2 = pca_before$x[, 2], adjusted = "Not adjusted"), data.frame(PC1 = pca_after$x[, 1], PC2 = pca_after$x[, 2], adjusted = "Adjusted"))
   df$sample_type <- metadata[match(c(rownames(pca_before$x), rownames(pca_after$x)), metadata$barcode), ]$sample_type
   df$batch <- metadata[match(c(rownames(pca_before$x), rownames(pca_after$x)), metadata$barcode), ]$batch
-  ggplot(df) + geom_point(aes(x = PC1, y = PC2, color = batch, shape = batch, pch = sample_type), alpha = 0.5) + guides(color = guide_legend(ncol = 2), shape = guide_legend(ncol = 2), size = guide_legend(ncol = 2)) + facet_wrap(~ adjusted)
+  ggplot(df) + geom_point(aes(x = PC1, y = PC2, color = batch, shape = batch, size = sample_type), alpha = 0.3) + scale_shape_manual(values = c(1:22, 34:60)[1:nlevels(df$batch)]) + scale_size_manual(values = c(2, 5)) + guides(color = guide_legend(ncol = 2), shape = guide_legend(ncol = 2), size = guide_legend(ncol = 2)) + facet_wrap(~ adjusted)
 }
-plotPCA(luad_normalized_counts, luad_adjusted_counts, luad_clinical)
-plotPCA(brca_normalized_counts, brca_adjusted_counts, brca_clinical)
-plotPCA(prad_normalized_counts, prad_adjusted_counts, prad_clinical)
+```
+
+```{r luad-pca, fig.show="hold", fig.width=12, fig.height=5}
+plotPCA(luad_normalized_counts, luad_adjusted_counts, luad_clinical) + ggtitle("PCA for batch effect adjusted LUAD data")
+```
+
+```{r brca-pca, fig.show="hold", fig.width=12, fig.height=5}
+plotPCA(brca_normalized_counts, brca_adjusted_counts, brca_clinical) + ggtitle("PCA for batch effect adjusted BRCA data")
+```
+
+```{r prad-pca, fig.show="hold", fig.width=12, fig.height=5}
+plotPCA(prad_normalized_counts, prad_adjusted_counts, prad_clinical) + ggtitle("PCA for batch effect adjusted PRAD data")
 ```
 
 
-```{r save-session}
-save(file = 'luad-counts.RData', luad_raw_counts, luad_normalized_counts)
-save(file = 'brca-counts.RData', brca_raw_counts, brca_normalized_counts)
-save(file = 'luad-metadata.RData', luad_metadata, luad_clinical)
-save(file = 'brca-metadata.RData', brca_metadata, brca_clinical)
-save.session("process-reads-image.RData")
+```{r save-session, cache=FALSE}
+save(file = 'luad-counts.RData', luad_clinical, luad_adjusted_counts)
+save(file = 'brca-counts.RData', brca_clinical, brca_adjusted_counts)
+save(file = 'prad-counts.RData', prad_clinical, prad_adjusted_counts)
+save(file = 'luad-metadata.RData', luad_clinical)
+save(file = 'brca-metadata.RData', brca_clinical)
+save(file = 'prad-metadata.RData', prad_clinical)
+save.session("process-reads.RSession")
 ```
