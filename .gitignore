@@ -4,6 +4,7 @@
 *.rdx
 *.RData
 *.Rhistory
+*.RSession
 *.tab
 *.txt
 *.swp
@@ -21,4 +22,6 @@
 *.sam
 *.out
 *.gz
+*.png
+.gitignore
 *_*
