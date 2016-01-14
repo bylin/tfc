@@ -1,0 +1,78 @@
+# trials
+_Last modified `r format(Sys.time(), "%I:%M %p on %b %d, %Y")`. This document, R session image, version history, knitr cache, figures, and other associated datasets are located in `/inside/grotto/blin/trna-markers/luad/elastic-nets/`._
+
+```{r setup, echo=FALSE, warning=FALSE, results=FALSE, message=FALSE, errors=FALSE, cache=FALSE}
+library(knitr)
+opts_chunk$set(cache = TRUE, cache.path = "/inside/grotto/blin/trna-markers/luad/elastic-nets/trials-cache/", eval = TRUE, echo = TRUE, warning = FALSE, results = FALSE, message = FALSE, autodep = TRUE, dev = "png", dpi = 300)
+```
+
+```{r libraries, cache=FALSE}
+library(gelnet)
+library(glmnet)
+library(ROCR)
+library(GenomicRanges)
+set.seed(12)
+```
+
+```{r load-data}
+load('/inside/home/blin/grotto/data/hg19-srnas.RData')
+features <- unique(srnas[srnas$class %in% c("trf-1", "trf-3", "trf-5", "actRF-3", "actRF-5")]$tx_name)
+load('/inside/home/blin/grotto/trna-markers/process-reads/luad-counts.RData')
+luad_clinical <- luad_clinical[match(colnames(luad_adjusted_counts), luad_clinical$barcode), ]
+```
+
+## Sample data
+
+We need to create 100 random datasets with training and test data. Each dataset will contain an equal amount of paired data.
+
+
+```{r sampling-function}
+randomSamplePatients <- function(metadata) {
+	# sample pairs of samples first
+	paired_metadata <- metadata[metadata$paired, ]
+	paired_samples <- sample(as.factor(paired_metadata$participant_id), nrow(paired_metadata)/2)
+	# then sample single sample patients
+	unpaired_metadata <- metadata[!metadata$paired, ]
+	unpaired_samples <- sample(as.factor(unpaired_metadata$participant_id), nrow(unpaired_metadata)/2)
+	# combine patient ids
+	c(as.character(paired_samples), as.character(unpaired_samples))
+}
+setupTrainingTestingSets <- function(metadata, counts) {
+  random_sample <- randomSamplePatients(metadata)
+  training_counts <-  counts[, metadata$participant_id %in% random_sample]
+  training_metadata <- metadata[metadata$participant_id %in% random_sample, ]
+  testing_counts <- counts[, !(metadata$participant_id %in% random_sample)]
+  testing_metadata <- metadata[!(metadata$participant_id %in% random_sample), ]
+  list(training_counts = training_counts, training_metadata = training_metadata, testing_counts = testing_counts, testing_metadata = testing_metadata)
+}
+```
+
+```{r sampling, eval=FALSE}
+ntrials <- 100
+luad_datasets <- lapply(1:ntrials, function(i) {
+  if (i %% 10 == 0) system(paste("echo", i, "/", ntrials, "trials"))
+  setupTrainingTestingSets(luad_clinical, luad_adjusted_counts)
+})
+save(file = "luad-datasets.RData", luad_datasets)
+```
+
+## Build elastic nets
+
+```{r elastic-nets-function}
+#buildElasticNet <- function(dataset, features) {
+	dataset <- luad_datasets[[1]]
+  counts <- t(dataset$training_counts[rownames(dataset$training_counts) %in% features, ])
+  response <- dataset$training_metadata$sample_type
+  #cv <- cv.glmnet(counts, response, alpha=0.5)
+  model1 <- glmnet(counts, response, family = "binomial", alpha = 0.5)
+  plot(model1)
+  #p1 <- predict(model1, newx = t(dataset$testing_counts), type = "response")
+  #prob1 <- prediction(p1$fit, t(dataset$testing_metadata$sample_type))
+  #perf1 <- performance(prob1, "tpr", "fpr")
+  #roc <- data.frame(TPR = unlist(perf1@y.values), FPR = unlist(perf1@x.values), Signature = "Sig1")
+#}
+```
+
+```{r save-session, cache=FALSE}
+save.session("trials.RSession")
+```
