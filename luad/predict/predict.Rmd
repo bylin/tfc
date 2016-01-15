@@ -1,9 +1,9 @@
 # Model LUAD stage
-_Last modified `r format(Sys.time(), "%I:%M %p on %b %d, %Y")`. This document, R session image, version history, knitr cache, figures, and other associated datasets are located in `/inside/grotto/blin/trna-markers/luad/stage/`._
+_Last modified `r format(Sys.time(), "%I:%M %p on %b %d, %Y")`. This document, R session image, version history, knitr cache, figures, and other associated datasets are located in `/inside/grotto/blin/trna-markers/luad/predict/`._
 
 ```{r setup, echo=FALSE, warning=FALSE, results=FALSE, message=FALSE, errors=FALSE, cache=FALSE}
 library(knitr)
-opts_chunk$set(cache = TRUE, cache.path = "/inside/grotto/blin/trna-markers/luad/stage/stage-cache/", eval = TRUE, echo = TRUE, warning = FALSE, results = FALSE, message = FALSE, autodep = TRUE, dev = "png", dpi = 300)
+opts_chunk$set(cache = TRUE, cache.path = "/inside/grotto/blin/trna-markers/luad/predict/predict-cache/", eval = TRUE, echo = TRUE, warning = FALSE, results = FALSE, message = FALSE, autodep = TRUE, dev = "png", dpi = 300)
 ```
 
 ```{r libraries, cache=FALSE}
@@ -165,5 +165,5 @@ meanAucs(metastasis$glms)
 ```
 
 ```{r save-session, cache=FALSE}
-save.session("stage.RSession")
+save.session("predict.RSession")
 ```
