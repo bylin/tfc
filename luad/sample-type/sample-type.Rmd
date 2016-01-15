@@ -1,13 +1,13 @@
-# trials
-_Last modified `r format(Sys.time(), "%I:%M %p on %b %d, %Y")`. This document, R session image, version history, knitr cache, figures, and other associated datasets are located in `/inside/grotto/blin/trna-markers/luad/elastic-nets/`._
+# Model LUAD sample type
+_Last modified `r format(Sys.time(), "%I:%M %p on %b %d, %Y")`. This document, R session image, version history, knitr cache, figures, and other associated datasets are located in `/inside/grotto/blin/trna-markers/luad/sample-type/`._
 
 ```{r setup, echo=FALSE, warning=FALSE, results=FALSE, message=FALSE, errors=FALSE, cache=FALSE}
 library(knitr)
-opts_chunk$set(cache = TRUE, cache.path = "/inside/grotto/blin/trna-markers/luad/elastic-nets/trials-cache/", eval = TRUE, echo = TRUE, warning = FALSE, results = FALSE, message = FALSE, autodep = TRUE, dev = "png", dpi = 300)
+opts_chunk$set(cache = TRUE, cache.path = "/inside/grotto/blin/trna-markers/luad/sample-type/trials-cache/", eval = TRUE, echo = TRUE, warning = FALSE, results = FALSE, message = FALSE, autodep = TRUE, dev = "png", dpi = 300)
 ```
 
 ```{r libraries, cache=FALSE}
-library(gelnet)
+library(gglm)
 library(glmnet)
 library(ROCR)
 library(GenomicRanges)
@@ -49,24 +49,23 @@ setupTrainingTestingSets <- function(metadata, counts) {
 }
 ```
 
-```{r sampling, eval=FALSE}
+```{r sampling, cache.lazy=FALSE}
 ntrials <- 100
 luad_datasets <- lapply(1:ntrials, function(i) {
   if (i %% 10 == 0) system(paste("echo", i, "/", ntrials, "trials"))
   setupTrainingTestingSets(luad_clinical, luad_adjusted_counts)
 })
-save(file = "luad-datasets.RData", luad_datasets)
 ```
 
-## Build elastic nets
+## Build GLMs
 
-```{r elastic-nets-function}
-buildTestElasticNet <- function(dataset, features, randomize = FALSE) {
+```{r glms-function}
+buildTestGlm <- function(dataset, features, randomize = FALSE) {
   training_counts <- t(dataset$training_counts[rownames(dataset$training_counts) %in% features, ])
   training_response <- dataset$training_metadata[match(colnames(dataset$training_counts), dataset$training_metadata$barcode), ]$sample_type
   testing_counts <- t(dataset$testing_counts[rownames(dataset$testing_counts) %in% features, ])
   testing_response <- dataset$testing_metadata[match(colnames(dataset$testing_counts), dataset$testing_metadata$barcode), ]$sample_type
-  model <- glmnet(training_counts, training_response, family = "binomial", alpha = 0.5)
+  model <- glmnet(training_counts, training_response, family = "binomial")
   chosen_model <- which.min(abs(model$df - 20)) # select for ~ 20 features)
   pred <- predict(model, newx = testing_counts, s = model$lambda[chosen_model])
   prob <- prediction(pred, testing_response)
@@ -82,38 +81,38 @@ buildTestElasticNet <- function(dataset, features, randomize = FALSE) {
 ```
 
 ```{r randomize-performance, fig.width=10, fig.height=4}
-luad_tsrna_elnets <- lapply(luad_datasets, buildTestElasticNet, features, randomize = TRUE)
-luad_mirna_elnets <- lapply(luad_datasets, buildTestElasticNet, unique(srnas[str_detect(srnas$class, "mi")]$tx_name), randomize = TRUE)
-df <- ldply(1:length(luad_tsrna_elnets), function(i) data.frame(luad_tsrna_elnets[[i]]$roc, Trial = as.factor(paste0(i, " (AUC = ", luad_tsrna_elnets[[i]]$auc, ")")), Class = "tsRNA"))
-df <- rbind(df, ldply(1:length(luad_mirna_elnets), function(i) data.frame(luad_mirna_elnets[[i]]$roc, Trial = as.factor(paste0(i, " (AUC = ", luad_mirna_elnets[[i]]$auc, ")")), Class = "miRNA")))
+luad_tsrna_glms <- lapply(luad_datasets, buildTestGlm, features, randomize = TRUE)
+luad_mirna_glms <- lapply(luad_datasets, buildTestGlm, unique(srnas[str_detect(srnas$class, "mi")]$tx_name), randomize = TRUE)
+df <- ldply(1:length(luad_tsrna_glms), function(i) data.frame(luad_tsrna_glms[[i]]$roc, Trial = as.factor(paste0(i, " (AUC = ", luad_tsrna_glms[[i]]$auc, ")")), Class = "tsRNA"))
+df <- rbind(df, ldply(1:length(luad_mirna_glms), function(i) data.frame(luad_mirna_glms[[i]]$roc, Trial = as.factor(paste0(i, " (AUC = ", luad_mirna_glms[[i]]$auc, ")")), Class = "miRNA")))
 ggplot(df) + geom_line(aes(x = FPR, y = TPR, color = Trial), alpha = 0.3) + geom_abline(intercept = 0, slope = 1, colour = "gray") + ylab("TPR") + xlab("FPR") + facet_wrap(~ Class) + guides(color = FALSE)
 ```
 
 
-```{r elnet-performance}
-luad_tsrna_elnets <- lapply(luad_datasets, buildTestElasticNet, features)
-luad_mirna_elnets <- lapply(luad_datasets, buildTestElasticNet, unique(srnas[str_detect(srnas$class, "mi")]$tx_name))
-luad_snorna_elnets <- lapply(luad_datasets, buildTestElasticNet, unique(srnas[srnas$class == "snoRNA"]$tx_name))
-luad_pirna_elnets <- lapply(luad_datasets, buildTestElasticNet, unique(srnas[srnas$class == "piRNA"]$tx_name))
-luad_half_elnets <- lapply(luad_datasets, buildTestElasticNet, unique(srnas[srnas$class %in% c("fivehalf", "threehalf")]$tx_name))
-luad_trna_elnets <- lapply(luad_datasets, buildTestElasticNet, unique(srnas[srnas$class == "tRNA"]$tx_name))
+```{r glm-performance}
+luad_tsrna_glms <- lapply(luad_datasets, buildTestGlm, features)
+luad_mirna_glms <- lapply(luad_datasets, buildTestGlm, unique(srnas[str_detect(srnas$class, "mi")]$tx_name))
+luad_snorna_glms <- lapply(luad_datasets, buildTestGlm, unique(srnas[srnas$class == "snoRNA"]$tx_name))
+luad_pirna_glms <- lapply(luad_datasets, buildTestGlm, unique(srnas[srnas$class == "piRNA"]$tx_name))
+luad_half_glms <- lapply(luad_datasets, buildTestGlm, unique(srnas[srnas$class %in% c("fivehalf", "threehalf")]$tx_name))
+luad_trna_glms <- lapply(luad_datasets, buildTestGlm, unique(srnas[srnas$class == "tRNA"]$tx_name))
 ```
 
-```{r plot-elnet-performance, fig.width=15, fig.height=8}
-df <- ldply(1:length(luad_tsrna_elnets), function(i) data.frame(luad_tsrna_elnets[[i]]$roc, Trial = as.factor(paste0(i, " (AUC = ", luad_tsrna_elnets[[i]]$auc, ")")), Class = "tsRNA"))
-df <- rbind(df, ldply(1:length(luad_mirna_elnets), function(i) data.frame(luad_mirna_elnets[[i]]$roc, Trial = as.factor(paste0(i, " (AUC = ", luad_mirna_elnets[[i]]$auc, ")")), Class = "miRNA")))
-df <- rbind(df, ldply(1:length(luad_snorna_elnets), function(i) data.frame(luad_snorna_elnets[[i]]$roc, Trial = as.factor(paste0(i, " (AUC = ", luad_snorna_elnets[[i]]$auc, ")")), Class = "snoRNA")))
-df <- rbind(df, ldply(1:length(luad_pirna_elnets), function(i) data.frame(luad_pirna_elnets[[i]]$roc, Trial = as.factor(paste0(i, " (AUC = ", luad_pirna_elnets[[i]]$auc, ")")), Class = "piRNA")))
-df <- rbind(df, ldply(1:length(luad_half_elnets), function(i) data.frame(luad_half_elnets[[i]]$roc, Trial = as.factor(paste0(i, " (AUC = ", luad_half_elnets[[i]]$auc, ")")), Class = "tRNA half")))
-df <- rbind(df, ldply(1:length(luad_trna_elnets), function(i) data.frame(luad_trna_elnets[[i]]$roc, Trial = as.factor(paste0(i, " (AUC = ", luad_trna_elnets[[i]]$auc, ")")), Class = "tRNA")))
+```{r plot-glm-performance, fig.width=15, fig.height=8}
+df <- ldply(1:length(luad_tsrna_glms), function(i) data.frame(luad_tsrna_glms[[i]]$roc, Trial = as.factor(paste0(i, " (AUC = ", luad_tsrna_glms[[i]]$auc, ")")), Class = "tsRNA"))
+df <- rbind(df, ldply(1:length(luad_mirna_glms), function(i) data.frame(luad_mirna_glms[[i]]$roc, Trial = as.factor(paste0(i, " (AUC = ", luad_mirna_glms[[i]]$auc, ")")), Class = "miRNA")))
+df <- rbind(df, ldply(1:length(luad_snorna_glms), function(i) data.frame(luad_snorna_glms[[i]]$roc, Trial = as.factor(paste0(i, " (AUC = ", luad_snorna_glms[[i]]$auc, ")")), Class = "snoRNA")))
+df <- rbind(df, ldply(1:length(luad_pirna_glms), function(i) data.frame(luad_pirna_glms[[i]]$roc, Trial = as.factor(paste0(i, " (AUC = ", luad_pirna_glms[[i]]$auc, ")")), Class = "piRNA")))
+df <- rbind(df, ldply(1:length(luad_half_glms), function(i) data.frame(luad_half_glms[[i]]$roc, Trial = as.factor(paste0(i, " (AUC = ", luad_half_glms[[i]]$auc, ")")), Class = "tRNA half")))
+df <- rbind(df, ldply(1:length(luad_trna_glms), function(i) data.frame(luad_trna_glms[[i]]$roc, Trial = as.factor(paste0(i, " (AUC = ", luad_trna_glms[[i]]$auc, ")")), Class = "tRNA")))
 ggplot(df) + geom_line(aes(x = FPR, y = TPR, color = Trial), alpha = 0.3) + geom_abline(intercept = 0, slope = 1, colour = "gray") + ylab("TPR") + xlab("FPR") + facet_wrap(~ Class, ncol = 3) + guides(color = FALSE)
 ```
 
 ```{r}
-mapply(function(elnets, name) paste(mean(unlist(lapply(1:length(elnets), function(i) elnets[[i]]$auc))), name), elnets = list(luad_tsrna_elnets, luad_mirna_elnets, luad_snorna_elnets, luad_pirna_elnets, luad_half_elnets, luad_trna_elnets), name = c("tsrna", "mirna", "snorna", "pirna", "half", "trna"))
+mapply(function(glms, name) paste(mean(unlist(lapply(1:length(glms), function(i) glms[[i]]$auc))), name), glms = list(luad_tsrna_glms, luad_mirna_glms, luad_snorna_glms, luad_pirna_glms, luad_half_glms, luad_trna_glms), name = c("tsrna", "mirna", "snorna", "pirna", "half", "trna"))
 ```
 
 
-```{r save-session, eval=FALSE}
+```{r save-session}
 save.session("trials.RSession")
 ```
