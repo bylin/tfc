@@ -55,7 +55,7 @@ buildTestGlm <- function(dataset, features, covariate, randomize = FALSE) {
 
 parseGlms <- function(glms, class) ldply(1:length(glms), function(i) data.frame(glms[[i]]$roc, Trial = i, AUC = glms[[i]]$auc, Class = class))
 
-plotGlms <- function(roc_df) ggplot(roc_df) + geom_line(aes(x = FPR, y = TPR, color = Trial), alpha = 0.3) + geom_abline(intercept = 0, slope = 1, colour = "gray") + ylab("TPR") + xlab("FPR") + facet_wrap(~ Class, ncol = 4) + guides(color = FALSE)
+plotGlms <- function(roc_df) ggplot(roc_df) + geom_line(aes(x = FPR, y = TPR, color = paste0(Trial, Class)), alpha = 0.3) + geom_abline(intercept = 0, slope = 1, colour = "gray") + ylab("TPR") + xlab("FPR") + facet_wrap(~ Class, nrow = 2) + guides(color = FALSE)
 
 meanAucs <- function(all_feature_glms) mapply(function(glms, name) paste(mean(unlist(lapply(1:length(glms), function(i) glms[[i]]$auc))), name), glms = all_feature_glms, name = c("tsrna", "mirna", "snorna", "pirna", "half", "trna"))
 ```
@@ -67,6 +67,7 @@ buildTestCompareGlms <- function(metadata, covariate, counts, srnas, ntrials) {
   # counts: filtered counts containing only sample with covariate of interest
 
   # set up training/testing sets and feature sets
+  system(paste0('echo Setting up training/testing sets'))
   datasets <- lapply(1:ntrials, function(i) setupTrainingTestingSets(metadata, covariate, counts))
   tsrnas <- unique(srnas[srnas$class %in% c("trf-1", "trf-3", "trf-5", "actRF-3", "actRF-5", "trailer")]$tx_name)
   mirnas <- unique(srnas[str_detect(srnas$class, "mi")]$tx_name)
@@ -76,19 +77,23 @@ buildTestCompareGlms <- function(metadata, covariate, counts, srnas, ntrials) {
   trnas <- unique(srnas[srnas$class == "tRNA"]$tx_name)
 
   # build, test on scrambled data (control)
+  system(paste0('echo Building/testing models - control'))
   control_tsrna_glms <- lapply(datasets, buildTestGlm, features = tsrnas, covariate = covariate, randomize = TRUE) # the same models are built twice, but the code is a lot cleaner this way
   control_mirna_glms <- lapply(datasets, buildTestGlm, features = mirnas, covariate = covariate, randomize = TRUE)
   control_feature_glms <- list(control_tsrna_glms, control_mirna_glms)
   control_roc <- ldply(mapply(parseGlms, glms = control_feature_glms, class = c("tsRNA, permuted", "miRNA, permuted"), SIMPLIFY = FALSE), identity)
   
   # build and predict testing data
+  system(paste0('echo Building/testing models'))
   all_feature_glms <- lapply(list(tsrnas, mirnas, snornas, pirnas, halves, trnas), function(features) {
   	lapply(datasets, buildTestGlm, features = features, covariate = covariate, randomize = FALSE)
   	})
   roc <- ldply(mapply(parseGlms, glms = all_feature_glms, class = c("tsRNA", "miRNA", "snoRNA", "piRNA", "tRNA half", "tRNA"), SIMPLIFY = FALSE), identity)
   roc <- rbind(roc, control_roc)
+  roc$Class <- factor(roc$Class, levels = c("tsRNA", "miRNA", "snoRNA", "tsRNA, permuted", "piRNA", "tRNA half", "tRNA", "miRNA, permuted"))
 
   # create plots
+  system(paste0('echo Creating summary plot'))
   plot <- plotGlms(roc)
 
   # create summary object
@@ -109,7 +114,7 @@ luad_clinical <- luad_clinical[match(colnames(luad_adjusted_counts), luad_clinic
 luad_clinical <- luad_clinical[luad_clinical$m_stage %in% c("M0", "M1", "M1a", "M1b"), ]
 luad_adjusted_counts <- luad_adjusted_counts[, colnames(luad_adjusted_counts) %in% luad_clinical$barcode]
 luad_clinical$metastasis <- as.factor(ifelse(luad_clinical$m_stage == "M0", "Metastasis" , "No metastasis"))
-metastasis <- buildTestCompareGlms(metadata = luad_clinical, covariate = "metastasis", counts = luad_adjusted_counts, srnas = srnas, ntrials = 5)
+metastasis <- buildTestCompareGlms(metadata = luad_clinical, covariate = "metastasis", counts = luad_adjusted_counts, srnas = srnas, ntrials = 100)
 ```
 
 ```{r metastasis-plot, fig.width=20, fig.height=8}
