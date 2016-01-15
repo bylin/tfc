@@ -14,6 +14,9 @@ library(GenomicRanges)
 library(stringr)
 set.seed(12)
 load('/inside/home/blin/grotto/data/hg19-srnas.RData')
+load('/inside/home/blin/grotto/trna-markers/process-reads/luad-counts.RData')
+luad_clinical <- luad_clinical[match(colnames(luad_adjusted_counts), luad_clinical$barcode), ]
+ntrials <- 5
 ```
 
 ## Generic function for classification of samples into discrete classes
@@ -55,26 +58,37 @@ buildTestGlm <- function(dataset, features, covariate, randomize = FALSE) {
 
 parseGlms <- function(glms, class) ldply(1:length(glms), function(i) data.frame(glms[[i]]$roc, Trial = i, AUC = glms[[i]]$auc, Class = class))
 
-plotGlms <- function(roc_df) ggplot(roc_df) + geom_line(aes(x = FPR, y = TPR, color = paste0(Trial, Class)), alpha = 0.3) + geom_abline(intercept = 0, slope = 1, colour = "gray") + ylab("TPR") + xlab("FPR") + facet_wrap(~ Class, nrow = 2) + guides(color = FALSE)
+plotGlms <- function(roc_df) ggplot(roc_df) + geom_line(aes(x = FPR, y = TPR, color = Trial, group = paste0(Trial, Class)), alpha = 0.3) + geom_abline(intercept = 0, slope = 1, colour = "gray") + ylab("TPR") + xlab("FPR") + facet_wrap(~ Class, nrow = 2) + guides(color = FALSE)
 
-meanAucs <- function(all_feature_glms) mapply(function(glms, name) paste(mean(unlist(lapply(1:length(glms), function(i) glms[[i]]$auc))), name), glms = all_feature_glms, name = c("tsrna", "mirna", "snorna", "pirna", "half", "trna"))
+plotMeanAucs <- function(all_feature_glms) {
+  mean_aucs <- lapply(all_feature_glms, function(glms) {
+    aucs <- lapply(1:length(glms), function(i) glms[[i]]$auc)
+    mean(unlist(aucs))
+  })
+  df <- data.frame(AUC = mean_aucs, Class = as.factor(c("tsrna", "mirna", "snorna", "pirna", "half", "trna")))
+  ggplot(df) + geom_bar(aes(x = Class, y = AUC), stat = "identity") + ggtitle("Mean AUC by sRNA type")
+}
 ```
 
 
 ```{r build-test-compare-glms}
-buildTestCompareGlms <- function(metadata, covariate, counts, srnas, ntrials) {
+buildTestCompareGlms <- function(metadata, covariate, counts, ntrials) {
   # metadata: filtered metadata for covariate of interest
   # counts: filtered counts containing only sample with covariate of interest
 
-  # set up training/testing sets and feature sets
-  system(paste0('echo Setting up training/testing sets'))
-  datasets <- lapply(1:ntrials, function(i) setupTrainingTestingSets(metadata, covariate, counts))
+  # set up feature sets
+  load('/inside/home/blin/grotto/data/hg19-srnas.RData')
   tsrnas <- unique(srnas[srnas$class %in% c("trf-1", "trf-3", "trf-5", "actRF-3", "actRF-5", "trailer")]$tx_name)
   mirnas <- unique(srnas[str_detect(srnas$class, "mi")]$tx_name)
   snornas <- unique(srnas[srnas$class == "snoRNA"]$tx_name)
   pirnas <- unique(srnas[srnas$class == "piRNA"]$tx_name)
   halves <- unique(srnas[srnas$class %in% c("fivehalf", "threehalf")]$tx_name)
   trnas <- unique(srnas[srnas$class == "tRNA"]$tx_name)
+
+  # create training/testing sets and feature sets
+  system(paste0('echo Setting up training/testing sets'))
+  datasets <- lapply(1:ntrials, function(i) setupTrainingTestingSets(metadata, covariate, counts))
+
 
   # build, test on scrambled data (control)
   system(paste0('echo Building/testing models - control'))
@@ -108,16 +122,44 @@ buildTestCompareGlms <- function(metadata, covariate, counts, srnas, ntrials) {
 
 ```
 
-```{r predict-metastasis}
-load('/inside/home/blin/grotto/trna-markers/process-reads/luad-counts.RData')
-luad_clinical <- luad_clinical[match(colnames(luad_adjusted_counts), luad_clinical$barcode), ]
-luad_clinical <- luad_clinical[luad_clinical$m_stage %in% c("M0", "M1", "M1a", "M1b"), ]
-luad_adjusted_counts <- luad_adjusted_counts[, colnames(luad_adjusted_counts) %in% luad_clinical$barcode]
-luad_clinical$metastasis <- as.factor(ifelse(luad_clinical$m_stage == "M0", "Metastasis" , "No metastasis"))
-metastasis <- buildTestCompareGlms(metadata = luad_clinical, covariate = "metastasis", counts = luad_adjusted_counts, srnas = srnas, ntrials = 100)
+```{r sample-type}
+metadata <- luad_clinical
+metadata$sample_type <- as.factor(metadata$sample_type)
+sample_type <- buildTestCompareGlms(metadata = metadata, covariate = "sample_type", counts = luad_adjusted_counts, ntrials = 100)
+```
+
+```{r sample-type-plot, fig.width=20, fig.height=8}
+sample_type$plot
+```
+
+```{r sample-type-auc-plot, fig.width=6, fig.height=4}
+plotMeanAucs(sample_type$glms)
+```
+
+
+```{r metastasis}
+metadata <- luad_clinical[luad_clinical$m_stage %in% c("M0", "M1", "M1a", "M1b"), ]
+counts <- luad_adjusted_counts[, colnames(luad_adjusted_counts) %in% metadata$barcode]
+metadata$metastasis <- as.factor(ifelse(metadata$m_stage == "M0", "Metastasis" , "No metastasis"))
+metastasis <- buildTestCompareGlms(metadata = metadata, covariate = "metastasis", counts = counts, ntrials = ntrials)
 ```
 
 ```{r metastasis-plot, fig.width=20, fig.height=8}
+metastasis$plot
+```
+
+```{r metastasis-auc-plot, fig.width=6, fig.height=4}
+plotMeanAucs(metastasis$glms)
+```
+
+```{r stage-coarse, eval=FALSE}
+metadata <- luad_clinical[luad_clinical$m_stage %in% c("M0", "M1", "M1a", "M1b"), ]
+counts <- luad_adjusted_counts[, colnames(luad_adjusted_counts) %in% metadata$barcode]
+metadata$metastasis <- as.factor(ifelse(metadata$m_stage == "M0", "Metastasis" , "No metastasis"))
+metastasis <- buildTestCompareGlms(metadata = metadata, covariate = "metastasis", counts = counts, ntrials = ntrials)
+```
+
+```{r stage-plot, fig.width=20, fig.height=8, eval=FALSE}
 metastasis$plot
 meanAucs(metastasis$glms)
 ```
