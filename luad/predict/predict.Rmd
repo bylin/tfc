@@ -16,7 +16,7 @@ set.seed(12)
 load('/inside/home/blin/grotto/data/hg19-srnas.RData')
 load('/inside/home/blin/grotto/trna-markers/process-reads/luad-counts.RData')
 luad_clinical <- luad_clinical[match(colnames(luad_adjusted_counts), luad_clinical$barcode), ]
-ntrials <- 5
+ntrials <- 150
 ```
 
 ## Generic function for classification of samples into discrete classes
@@ -58,14 +58,14 @@ buildTestGlm <- function(dataset, features, covariate, randomize = FALSE) {
 
 parseGlms <- function(glms, class) ldply(1:length(glms), function(i) data.frame(glms[[i]]$roc, Trial = i, AUC = glms[[i]]$auc, Class = class))
 
-plotGlms <- function(roc_df) ggplot(roc_df) + geom_line(aes(x = FPR, y = TPR, color = Trial, group = paste0(Trial, Class)), alpha = 0.3) + geom_abline(intercept = 0, slope = 1, colour = "gray") + ylab("TPR") + xlab("FPR") + facet_wrap(~ Class, nrow = 2) + guides(color = FALSE)
+plotGlms <- function(roc_df) ggplot(roc_df) + geom_line(aes(x = FPR, y = TPR, color = Class, group = paste0(Trial, Class)), alpha = 0.3) + geom_abline(intercept = 0, slope = 1, colour = "gray") + ylab("TPR") + xlab("FPR") + facet_wrap(~ Class, nrow = 2) + guides(color = FALSE)
 
 plotMeanAucs <- function(all_feature_glms) {
   mean_aucs <- lapply(all_feature_glms, function(glms) {
     aucs <- lapply(1:length(glms), function(i) glms[[i]]$auc)
     mean(unlist(aucs))
   })
-  df <- data.frame(AUC = mean_aucs, Class = as.factor(c("tsrna", "mirna", "snorna", "pirna", "half", "trna")))
+  df <- data.frame(AUC = unlist(mean_aucs), Class = as.factor(c("tsRNA", "miRNA", "snoRNA", "piRNA", "tRNA half", "tRNA")))
   ggplot(df) + geom_bar(aes(x = Class, y = AUC), stat = "identity") + ggtitle("Mean AUC by sRNA type")
 }
 ```
@@ -125,14 +125,14 @@ buildTestCompareGlms <- function(metadata, covariate, counts, ntrials) {
 ```{r sample-type}
 metadata <- luad_clinical
 metadata$sample_type <- as.factor(metadata$sample_type)
-sample_type <- buildTestCompareGlms(metadata = metadata, covariate = "sample_type", counts = luad_adjusted_counts, ntrials = 100)
+sample_type <- buildTestCompareGlms(metadata = metadata, covariate = "sample_type", counts = luad_adjusted_counts, ntrials = ntrials)
 ```
 
 ```{r sample-type-plot, fig.width=20, fig.height=8}
 sample_type$plot
 ```
 
-```{r sample-type-auc-plot, fig.width=6, fig.height=4}
+```{r sample-type-auc-plot, fig.width=6, fig.height=6, out.width="400px"}
 plotMeanAucs(sample_type$glms)
 ```
 
@@ -140,7 +140,7 @@ plotMeanAucs(sample_type$glms)
 ```{r metastasis}
 metadata <- luad_clinical[luad_clinical$m_stage %in% c("M0", "M1", "M1a", "M1b"), ]
 counts <- luad_adjusted_counts[, colnames(luad_adjusted_counts) %in% metadata$barcode]
-metadata$metastasis <- as.factor(ifelse(metadata$m_stage == "M0", "Metastasis" , "No metastasis"))
+metadata$metastasis <- as.factor(ifelse(metadata$m_stage == "M0", "No metastasis" , "Metastasis"))
 metastasis <- buildTestCompareGlms(metadata = metadata, covariate = "metastasis", counts = counts, ntrials = ntrials)
 ```
 
@@ -148,21 +148,42 @@ metastasis <- buildTestCompareGlms(metadata = metadata, covariate = "metastasis"
 metastasis$plot
 ```
 
-```{r metastasis-auc-plot, fig.width=6, fig.height=4}
+```{r metastasis-auc-plot, fig.width=6, fig.height=6, out.width="400px"}
 plotMeanAucs(metastasis$glms)
 ```
 
-```{r stage-coarse, eval=FALSE}
-metadata <- luad_clinical[luad_clinical$m_stage %in% c("M0", "M1", "M1a", "M1b"), ]
+```{r stage-coarse}
+# stage I, IA vs stage IIIA, IIIB, IV - essentially spreading vs non-spreading
+metadata <- luad_clinical[luad_clinical$stage %in% c("Stage I", "Stage IA", "Stage IIIA", "Stage IIIB", "Stage IV"), ]
 counts <- luad_adjusted_counts[, colnames(luad_adjusted_counts) %in% metadata$barcode]
-metadata$metastasis <- as.factor(ifelse(metadata$m_stage == "M0", "Metastasis" , "No metastasis"))
-metastasis <- buildTestCompareGlms(metadata = metadata, covariate = "metastasis", counts = counts, ntrials = ntrials)
+metadata$stage <- as.factor(ifelse(metadata$stage %in% c("Stage I", "Stage IA"), "Early stage" , "Late stage"))
+stage_coarse <- buildTestCompareGlms(metadata = metadata, covariate = "stage", counts = counts, ntrials = ntrials)
 ```
 
-```{r stage-plot, fig.width=20, fig.height=8, eval=FALSE}
-metastasis$plot
-meanAucs(metastasis$glms)
+```{r stage-coarse-plot, fig.width=20, fig.height=8}
+stage_coarse$plot
 ```
+
+```{r stage-coarse-auc-plot, fig.width=6, fig.height=6, out.width="400px"}
+plotMeanAucs(stage_coarse$glms)
+```
+
+```{r early-progression}
+# stage I, IA, vs stage II, IIA, IIB, IIIA, IIIB - early progression
+metadata <- luad_clinical[luad_clinical$stage != "[Not Available]", ]
+counts <- luad_adjusted_counts[, colnames(luad_adjusted_counts) %in% metadata$barcode]
+metadata$stage <- as.factor(ifelse(metadata$stage %in% c("Stage I", "Stage IA", "Stage IB"), "Not progressed" , "Progressed"))
+early_progression <- buildTestCompareGlms(metadata = metadata, covariate = "stage", counts = counts, ntrials = ntrials)
+```
+
+```{r early-progression-plot, fig.width=20, fig.height=8}
+early_progression$plot
+```
+
+```{r early-progression-auc-plot, fig.width=6, fig.height=6, out.width="400px"}
+plotMeanAucs(early_progression$glms)
+```
+
 
 ```{r save-session, cache=FALSE}
 save.session("predict.RSession")
