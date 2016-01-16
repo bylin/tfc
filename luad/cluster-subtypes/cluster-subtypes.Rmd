@@ -1,0 +1,26 @@
+# cluster-subtypes
+_Last modified `r format(Sys.time(), "%I:%M %p on %b %d, %Y")`. This document, R session image, version history, knitr cache, figures, and other associated datasets are located in `/inside/grotto/blin/trna-markers/luad/cluster-subtypes/`._
+
+```{r setup, echo=FALSE, warning=FALSE, results=FALSE, message=FALSE, errors=FALSE, cache=FALSE}
+library(knitr)
+opts_chunk$set(cache = TRUE, cache.path = "/inside/grotto/blin/trna-markers/luad/cluster-subtypes/cluster-subtypes-cache/", eval = TRUE, echo = TRUE, warning = FALSE, results = FALSE, message = FALSE, autodep = TRUE, dev = "png", dpi = 300)
+```
+
+```{r libraries, cache=FALSE}
+```
+
+Prediction of clinical covariates for lung adenocarcinoma only worked for predicting cancer incidence. This may be because the signal is muddled by heterogeneity in the samples. One solution to this is to separate the cancer into its three molecular subtypes first described [here](http://journals.plos.org/plosone/article?id=10.1371/journal.pone.0036530). Here's how they did it:
+
+> ...molecular subtypes were detected using gene expression as previously described [14] using ConsensusClusterPlus [28] and the largest published cohort, Shedden et al. A nearest centroid subtype predictor [29] utilizing 506 genes was trained on the Shedden et al. cohort and applied to all LAD tumors. The subtype predictor centroids were then publically posted (http://cancer.unc.edu/nhayes/publications/adenocarcinoma.2012/).
+
+So we'll need three things:
+
+- Centroids
+- ConsensusClusterPlus
+- Gene expression data 
+
+
+
+```{r save-session, cache=FALSE}
+save.session("cluster-subtypes.RSession")
+```
