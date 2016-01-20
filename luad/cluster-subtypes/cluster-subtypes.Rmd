@@ -7,17 +7,63 @@ opts_chunk$set(cache = TRUE, cache.path = "/inside/grotto/blin/trna-markers/luad
 ```
 
 ```{r libraries, cache=FALSE}
+library(stringr)
+library(plyr)
+library(reshape2)
 ```
 
 Prediction of clinical covariates for lung adenocarcinoma only worked for predicting cancer incidence. This may be because the signal is muddled by heterogeneity in the samples. One solution to this is to separate the cancer into its three molecular subtypes first described [here](http://journals.plos.org/plosone/article?id=10.1371/journal.pone.0036530). Here's how they did it:
 
 > ...molecular subtypes were detected using gene expression as previously described [14] using ConsensusClusterPlus [28] and the largest published cohort, Shedden et al. A nearest centroid subtype predictor [29] utilizing 506 genes was trained on the Shedden et al. cohort and applied to all LAD tumors. The subtype predictor centroids were then publically posted (http://cancer.unc.edu/nhayes/publications/adenocarcinoma.2012/).
 
-So we'll need three things:
+So we'll need two things:
 
 - Centroids
-- ConsensusClusterPlus
+	- Easy, downloaded from link.
 - Gene expression data 
+	- Harder, need to match up genes to IDs.
+
+
+## Load gene expression data and match to samples
+
+```{r load-expression}
+load('/inside/grotto/blin/trna-markers/process-reads/luad-metadata.RData')
+rnaseq_ids <- read.table('/inside/grotto/blin/trna-markers/datasets/luad/rnaseq/FILE_SAMPLE_MAP.txt', header = TRUE, stringsAsFactors = FALSE)
+colnames(rnaseq_ids) <- c("filename", "barcode")
+rnaseq_ids <- rnaseq_ids[str_detect(rnaseq_ids$filename, "genes\\.normalized_results"), ]
+
+gene_counts <- ldply(1:nrow(luad_clinical), function(i) {
+  row <- luad_clinical[i, ]
+  sample <- row$barcode
+  filename <- rnaseq_ids[match(substr(row$barcode, 1, 12), substr(rnaseq_ids$barcode, 1, 12)), ]$filename
+  if (is.na(filename)) return(data.frame())
+  path <- paste0('/inside/grotto/blin/trna-markers/datasets/luad/rnaseq/', filename)
+  expression <- read.table(path, stringsAsFactors = FALSE, header = TRUE)
+  strings <- unlist(str_split(expression$gene_id, "\\|"))
+  data.frame(gene = strings[seq(1, length(strings), 2)], ids = strings[seq(2, length(strings), 2)], counts = expression$normalized_count, sample = row$barcode)
+  })
+```
+
+### Set up sd, mean estimates
+
+```{r gene-estimates}
+
+
+```
+
+We want to scale by gene (avoid overweighting )
+
+## Test centroid prediction
+
+Prediction is simple and doesn't require a package. *N* samples have *M* genes, with expression values *x*<sub>m</sub>. There are *S* subtypes, where *μ*<sub>s</sub> is a vector of length *M* with all the centroids (centroids.tab). For each subtype *s*, we calculate the Euclidean distance between sample *n* and *μ*<sub>s</sub>. The sample is classified to the subtype with the lowest distance.
+
+```{r load-known-classifs, eval=FALSE}
+centroids <- read.table('centroids.tab', stringsAsFactors = FALSE, header = TRUE)
+log2(counts/mean)
+```
+
+
+## Predict rest of data
 
 
 
