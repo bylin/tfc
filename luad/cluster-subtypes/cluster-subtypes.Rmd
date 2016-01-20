@@ -1,4 +1,4 @@
-# cluster-subtypes
+# Cluster LUAD samples by subtype
 _Last modified `r format(Sys.time(), "%I:%M %p on %b %d, %Y")`. This document, R session image, version history, knitr cache, figures, and other associated datasets are located in `/inside/grotto/blin/trna-markers/luad/cluster-subtypes/`._
 
 ```{r setup, echo=FALSE, warning=FALSE, results=FALSE, message=FALSE, errors=FALSE, cache=FALSE}
@@ -36,30 +36,37 @@ gene_counts <- ldply(1:nrow(luad_clinical), function(i) {
   row <- luad_clinical[i, ]
   sample <- row$barcode
   filename <- rnaseq_ids[match(substr(row$barcode, 1, 12), substr(rnaseq_ids$barcode, 1, 12)), ]$filename
-  if (is.na(filename)) return(data.frame())
+  if (is.na(filename) | row$sample_type == "NT") return(data.frame())
   path <- paste0('/inside/grotto/blin/trna-markers/datasets/luad/rnaseq/', filename)
   expression <- read.table(path, stringsAsFactors = FALSE, header = TRUE)
   strings <- unlist(str_split(expression$gene_id, "\\|"))
-  data.frame(gene = strings[seq(1, length(strings), 2)], ids = strings[seq(2, length(strings), 2)], counts = expression$normalized_count, sample = row$barcode)
+  data.frame(gene = strings[seq(1, length(strings), 2)], id = as.factor(strings[seq(2, length(strings), 2)]), counts = expression$normalized_count, sample = as.factor(row$barcode), stringsAsFactors = FALSE)
   })
 ```
 
-### Set up sd, mean estimates
+### Standardize counts
 
 ```{r gene-estimates}
-
-
+means <- dcast(gene_counts, gene + id ~ ., value.var = "counts", fun.aggregate = mean)
+sds <- dcast(gene_counts, gene + id ~ ., value.var = "counts", fun.aggregate = sd)
+means <- means[match(gene_counts$id, means$id)]
+sds <- sds[match(gene_counts$id, means$id)]
+gene_counts$counts <- (means - gene_counts$counts) / sds
 ```
 
-We want to scale by gene (avoid overweighting )
+```{r load-centroids}
+centroids <- read.table('centroids.tab', stringsAsFactors = FALSE, header = TRUE)
+gene_counts <- gene_counts[gene_counts$gene %in% rownames(centroids), ]
+centroids <- centroids[rownames(centroids) %in% gene_counts$gene, ]
+```
 
 ## Test centroid prediction
 
 Prediction is simple and doesn't require a package. *N* samples have *M* genes, with expression values *x*<sub>m</sub>. There are *S* subtypes, where *μ*<sub>s</sub> is a vector of length *M* with all the centroids (centroids.tab). For each subtype *s*, we calculate the Euclidean distance between sample *n* and *μ*<sub>s</sub>. The sample is classified to the subtype with the lowest distance.
 
-```{r load-known-classifs, eval=FALSE}
-centroids <- read.table('centroids.tab', stringsAsFactors = FALSE, header = TRUE)
-log2(counts/mean)
+```{r load-known-classifs}
+known_clusters <- read.table('known_clusters.tab', stringsAsFactors = FALSE, header = TRUE)
+test_counts <- gene_counts[substr(gene_counts$sample, 1, 12) %in% known_clusters$barcode, ]
 ```
 
 

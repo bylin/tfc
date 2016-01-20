@@ -3,7 +3,7 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
 
-<title>cluster-subtypes</title>
+<title>Cluster LUAD samples by subtype</title>
 
 <script type="text/javascript">
 window.onload = function() {
@@ -201,9 +201,14 @@ hr {
 </head>
 
 <body>
-<h1>cluster-subtypes</h1>
+<h1>Cluster LUAD samples by subtype</h1>
 
-<p><em>Last modified 03:05 PM on Jan 19, 2016. This document, R session image, version history, knitr cache, figures, and other associated datasets are located in <code>/inside/grotto/blin/trna-markers/luad/cluster-subtypes/</code>.</em></p>
+<p><em>Last modified 06:39 PM on Jan 19, 2016. This document, R session image, version history, knitr cache, figures, and other associated datasets are located in <code>/inside/grotto/blin/trna-markers/luad/cluster-subtypes/</code>.</em></p>
+
+<pre><code class="r">library(stringr)
+library(plyr)
+library(reshape2)
+</code></pre>
 
 <p>Prediction of clinical covariates for lung adenocarcinoma only worked for predicting cancer incidence. This may be because the signal is muddled by heterogeneity in the samples. One solution to this is to separate the cancer into its three molecular subtypes first described <a href="http://journals.plos.org/plosone/article?id=10.1371/journal.pone.0036530">here</a>. Here&#39;s how they did it:</p>
 
@@ -211,14 +216,76 @@ hr {
 <p>&hellip;molecular subtypes were detected using gene expression as previously described [14] using ConsensusClusterPlus [28] and the largest published cohort, Shedden et al. A nearest centroid subtype predictor [29] utilizing 506 genes was trained on the Shedden et al. cohort and applied to all LAD tumors. The subtype predictor centroids were then publically posted (<a href="http://cancer.unc.edu/nhayes/publications/adenocarcinoma.2012/">http://cancer.unc.edu/nhayes/publications/adenocarcinoma.2012/</a>).</p>
 </blockquote>
 
-<p>So we&#39;ll need three things:</p>
+<p>So we&#39;ll need two things:</p>
 
 <ul>
-<li>Centroids</li>
-<li>Gene expression data </li>
+<li>Centroids
+
+<ul>
+<li>Easy, downloaded from link.</li>
+</ul></li>
+<li>Gene expression data 
+
+<ul>
+<li>Harder, need to match up genes to IDs.</li>
+</ul></li>
 </ul>
 
+<h2>Load gene expression data and match to samples</h2>
+
+<pre><code class="r">load(&#39;/inside/grotto/blin/trna-markers/process-reads/luad-metadata.RData&#39;)
+rnaseq_ids &lt;- read.table(&#39;/inside/grotto/blin/trna-markers/datasets/luad/rnaseq/FILE_SAMPLE_MAP.txt&#39;, header = TRUE, stringsAsFactors = FALSE)
+colnames(rnaseq_ids) &lt;- c(&quot;filename&quot;, &quot;barcode&quot;)
+rnaseq_ids &lt;- rnaseq_ids[str_detect(rnaseq_ids$filename, &quot;genes\\.normalized_results&quot;), ]
+
+gene_counts &lt;- ldply(1:nrow(luad_clinical), function(i) {
+  row &lt;- luad_clinical[i, ]
+  sample &lt;- row$barcode
+  filename &lt;- rnaseq_ids[match(substr(row$barcode, 1, 12), substr(rnaseq_ids$barcode, 1, 12)), ]$filename
+  if (is.na(filename) | row$sample_type == &quot;NT&quot;) return(data.frame())
+  path &lt;- paste0(&#39;/inside/grotto/blin/trna-markers/datasets/luad/rnaseq/&#39;, filename)
+  expression &lt;- read.table(path, stringsAsFactors = FALSE, header = TRUE)
+  strings &lt;- unlist(str_split(expression$gene_id, &quot;\\|&quot;))
+  data.frame(gene = strings[seq(1, length(strings), 2)], id = as.factor(strings[seq(2, length(strings), 2)]), counts = expression$normalized_count, sample = as.factor(row$barcode), stringsAsFactors = FALSE)
+  })
+</code></pre>
+
+<h3>Standardize counts</h3>
+
+<pre><code class="r">means &lt;- dcast(gene_counts, gene + id ~ ., value.var = &quot;counts&quot;, fun.aggregate = mean)
+sds &lt;- dcast(gene_counts, gene + id ~ ., value.var = &quot;counts&quot;, fun.aggregate = sd)
+means &lt;- means[match(gene_counts$id, means$id)]
+</code></pre>
+
+<pre><code>## Error in `[.data.frame`(means, match(gene_counts$id, means$id)): undefined columns selected
+</code></pre>
+
+<pre><code class="r">sds &lt;- sds[match(gene_counts$id, means$id)]
+</code></pre>
+
+<pre><code>## Error in `[.data.frame`(sds, match(gene_counts$id, means$id)): undefined columns selected
+</code></pre>
+
+<pre><code class="r">gene_counts$counts &lt;- (means - gene_counts$counts) / sds
+</code></pre>
+
+<pre><code>## Error in FUN(left, right): non-numeric argument to binary operator
+</code></pre>
+
+<pre><code class="r">centroids &lt;- read.table(&#39;centroids.tab&#39;, stringsAsFactors = FALSE, header = TRUE)
+gene_counts &lt;- gene_counts[gene_counts$gene %in% rownames(centroids), ]
+centroids &lt;- centroids[rownames(centroids) %in% gene_counts$gene, ]
+</code></pre>
+
+<h2>Test centroid prediction</h2>
+
 <p>Prediction is simple and doesn&#39;t require a package. <em>N</em> samples have <em>M</em> genes, with expression values <em>x</em><sub>m</sub>. There are <em>S</em> subtypes, where <em>μ</em><sub>s</sub> is a vector of length <em>M</em> with all the centroids (centroids.tab). For each subtype <em>s</em>, we calculate the Euclidean distance between sample <em>n</em> and <em>μ</em><sub>s</sub>. The sample is classified to the subtype with the lowest distance.</p>
+
+<pre><code class="r">known_clusters &lt;- read.table(&#39;known_clusters.tab&#39;, stringsAsFactors = FALSE, header = TRUE)
+test_counts &lt;- gene_counts[substr(gene_counts$sample, 1, 12) %in% known_clusters$barcode, ]
+</code></pre>
+
+<h2>Predict rest of data</h2>
 
 <pre><code class="r">save.session(&quot;cluster-subtypes.RSession&quot;)
 </code></pre>
