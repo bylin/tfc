@@ -203,11 +203,13 @@ hr {
 <body>
 <h1>Cluster LUAD samples by subtype</h1>
 
-<p><em>Last modified 06:39 PM on Jan 19, 2016. This document, R session image, version history, knitr cache, figures, and other associated datasets are located in <code>/inside/grotto/blin/trna-markers/luad/cluster-subtypes/</code>.</em></p>
+<p><em>Last modified 09:26 PM on Jan 20, 2016. This document, R session image, version history, knitr cache, figures, and other associated datasets are located in <code>/inside/grotto/blin/trna-markers/luad/cluster-subtypes/</code>.</em></p>
 
 <pre><code class="r">library(stringr)
 library(plyr)
 library(reshape2)
+library(parallel)
+library(sva)
 </code></pre>
 
 <p>Prediction of clinical covariates for lung adenocarcinoma only worked for predicting cancer incidence. This may be because the signal is muddled by heterogeneity in the samples. One solution to this is to separate the cancer into its three molecular subtypes first described <a href="http://journals.plos.org/plosone/article?id=10.1371/journal.pone.0036530">here</a>. Here&#39;s how they did it:</p>
@@ -248,52 +250,148 @@ gene_counts &lt;- ldply(1:nrow(luad_clinical), function(i) {
   strings &lt;- unlist(str_split(expression$gene_id, &quot;\\|&quot;))
   data.frame(gene = strings[seq(1, length(strings), 2)], id = as.factor(strings[seq(2, length(strings), 2)]), counts = expression$normalized_count, sample = as.factor(row$barcode), stringsAsFactors = FALSE)
   })
-</code></pre>
 
-<h3>Standardize counts</h3>
-
-<pre><code class="r">means &lt;- dcast(gene_counts, gene + id ~ ., value.var = &quot;counts&quot;, fun.aggregate = mean)
-sds &lt;- dcast(gene_counts, gene + id ~ ., value.var = &quot;counts&quot;, fun.aggregate = sd)
-means &lt;- means[match(gene_counts$id, means$id)]
-</code></pre>
-
-<pre><code>## Error in `[.data.frame`(means, match(gene_counts$id, means$id)): undefined columns selected
-</code></pre>
-
-<pre><code class="r">sds &lt;- sds[match(gene_counts$id, means$id)]
-</code></pre>
-
-<pre><code>## Error in `[.data.frame`(sds, match(gene_counts$id, means$id)): undefined columns selected
-</code></pre>
-
-<pre><code class="r">gene_counts$counts &lt;- (means - gene_counts$counts) / sds
-</code></pre>
-
-<pre><code>## Error in FUN(left, right): non-numeric argument to binary operator
-</code></pre>
-
-<pre><code class="r">centroids &lt;- read.table(&#39;centroids.tab&#39;, stringsAsFactors = FALSE, header = TRUE)
+centroids &lt;- read.table(&#39;centroids.tab&#39;, stringsAsFactors = FALSE, header = TRUE)
 gene_counts &lt;- gene_counts[gene_counts$gene %in% rownames(centroids), ]
 centroids &lt;- centroids[rownames(centroids) %in% gene_counts$gene, ]
 </code></pre>
 
+<h3>Standardize counts</h3>
+
+<pre><code class="r">scaled_gene_counts &lt;- gene_counts
+means &lt;- dcast(scaled_gene_counts, gene + id ~ ., value.var = &quot;counts&quot;, fun.aggregate = mean)
+sds &lt;- dcast(scaled_gene_counts, gene + id ~ ., value.var = &quot;counts&quot;, fun.aggregate = sd)
+means &lt;- means[match(scaled_gene_counts$id, means$id), ]
+sds &lt;- sds[match(scaled_gene_counts$id, means$id), ]
+scaled_gene_counts$counts &lt;- (scaled_gene_counts$counts - means$.) / sds$. 
+</code></pre>
+
 <h2>Test centroid prediction</h2>
 
-<p>Prediction is simple and doesn&#39;t require a package. <em>N</em> samples have <em>M</em> genes, with expression values <em>x</em><sub>m</sub>. There are <em>S</em> subtypes, where <em>μ</em><sub>s</sub> is a vector of length <em>M</em> with all the centroids (centroids.tab). For each subtype <em>s</em>, we calculate the Euclidean distance between sample <em>n</em> and <em>μ</em><sub>s</sub>. The sample is classified to the subtype with the lowest distance.</p>
+<p>Prediction is simple and doesn&#39;t require a package. <em>N</em> samples have <em>M</em> genes, with expression values <em>x</em><sub>m</sub>. There are <em>S</em> subtypes, where <em>μ</em><sub>s</sub> is a vector of length <em>M</em> with all the centroids (centroids.tab). For each subtype <em>s</em>, we calculate the Euclidean distance between sample <em>n</em> and <em>μ</em><sub>s</sub>. The sample is classified to the subtype with the lowest distance. The problem with this approach is that it requires the original estimates of mean and standard deviation, which we don&#39;t have but can calculate (sort of).</p>
+
+<p>Alternatively, we can compare the difference <em>x</em><sub>mn</sub> with <em>μ</em><sub>n</sub>, and the minimum difference would cast a &ldquo;vote&rdquo; for that subtype. Let&#39;s try Euclidean first, then see what happens.</p>
 
 <pre><code class="r">known_clusters &lt;- read.table(&#39;known_clusters.tab&#39;, stringsAsFactors = FALSE, header = TRUE)
-test_counts &lt;- gene_counts[substr(gene_counts$sample, 1, 12) %in% known_clusters$barcode, ]
+scaled_gene_counts &lt;- scaled_gene_counts[substr(scaled_gene_counts$sample, 1, 12) %in% known_clusters$barcode, ]
 </code></pre>
 
-<h2>Predict rest of data</h2>
+<pre><code class="r">test_clusters &lt;- ldply(unique(scaled_gene_counts$sample), function(barcode) {
+  counts &lt;- scaled_gene_counts[scaled_gene_counts$sample == barcode, ]
+  subtype &lt;- names(which.min(sqrt(colSums((centroids - counts[match(rownames(centroids), counts$gene), ]$counts)^2))))
+  c(barcode = substr(as.character(barcode), 1, 12), subtype = subtype)
+  })
+perf &lt;- merge(known_clusters, test_clusters, by = &quot;barcode&quot;)
+# Accuracy
+sum(perf$subtype.x == perf$subtype.y)/nrow(perf)
+</code></pre>
+
+<pre><code>## [1] 0.7695652
+</code></pre>
+
+<pre><code class="r">test_clusters &lt;- ldply(unique(scaled_gene_counts$sample), function(barcode) {
+  counts &lt;- scaled_gene_counts[scaled_gene_counts$sample == barcode, ]
+  df &lt;- centroids - counts[match(rownames(centroids), counts$gene), ]$counts
+  subtype &lt;- colnames(centroids)[which.max(table(apply(df, 1, which.min)))]
+  c(barcode = substr(as.character(barcode), 1, 12), subtype = subtype)
+  })
+perf &lt;- merge(known_clusters, test_clusters, by = &quot;barcode&quot;)
+# Accuracy
+sum(perf$subtype.x == perf$subtype.y)/nrow(perf)
+</code></pre>
+
+<pre><code>## [1] 0.273913
+</code></pre>
+
+<p>Okay, neither of those worked. Let&#39;s use log2 fold change and see if that works better.</p>
+
+<pre><code class="r">scaled_gene_counts &lt;- gene_counts
+means &lt;- dcast(scaled_gene_counts, gene + id ~ ., value.var = &quot;counts&quot;, fun.aggregate = mean)
+log2fc &lt;- ldply(mclapply(1:nrow(gene_counts), function(i) {
+  row &lt;- gene_counts[i, ]
+  data.frame(gene = row$gene, log2fc = log2(means[means$gene == row$gene, ]$./(row$counts+1)), sample = row$sample)
+  }, mc.cores = 20), identity)
+scaled_gene_counts &lt;- merge(scaled_gene_counts, log2fc, by = c(&quot;gene&quot;, &quot;sample&quot;))
+</code></pre>
+
+<pre><code class="r">test_clusters &lt;- ldply(unique(scaled_gene_counts$sample), function(barcode) {
+  counts &lt;- scaled_gene_counts[scaled_gene_counts$sample == barcode, ]
+  subtype &lt;- names(which.min(sqrt(colSums((centroids - counts[match(rownames(centroids), counts$gene), ]$log2fc)^2))))
+  c(barcode = substr(as.character(barcode), 1, 12), subtype = subtype)
+  })
+perf &lt;- merge(known_clusters, test_clusters, by = &quot;barcode&quot;)
+# Accuracy
+sum(perf$subtype.x == perf$subtype.y)/nrow(perf)
+</code></pre>
+
+<pre><code>## [1] 0.01304348
+</code></pre>
+
+<pre><code class="r">test_clusters &lt;- ldply(unique(scaled_gene_counts$sample), function(barcode) {
+  counts &lt;- scaled_gene_counts[scaled_gene_counts$sample == barcode, ]
+  df &lt;- centroids - counts[match(rownames(centroids), counts$gene), ]$log2fc
+  subtype &lt;- colnames(centroids)[which.max(table(apply(df, 1, which.min)))]
+  c(barcode = substr(as.character(barcode), 1, 12), subtype = subtype)
+  })
+perf &lt;- merge(known_clusters, test_clusters, by = &quot;barcode&quot;)
+# Accuracy
+sum(perf$subtype.x == perf$subtype.y)/nrow(perf)
+</code></pre>
+
+<pre><code>## [1] 0.273913
+</code></pre>
+
+<p>Next attempt, raw counts</p>
+
+<pre><code class="r">test_clusters &lt;- ldply(unique(gene_counts$sample), function(barcode) {
+  counts &lt;- gene_counts[gene_counts$sample == barcode, ]
+  subtype &lt;- names(which.min(sqrt(colSums((centroids - counts[match(rownames(centroids), counts$gene), ]$counts)^2))))
+  c(barcode = substr(as.character(barcode), 1, 12), subtype = subtype)
+  })
+perf &lt;- merge(known_clusters, test_clusters, by = &quot;barcode&quot;)
+# Accuracy
+sum(perf$subtype.x == perf$subtype.y)/nrow(perf)
+</code></pre>
+
+<pre><code>## [1] 0.6521739
+</code></pre>
+
+<pre><code class="r">test_clusters &lt;- ldply(unique(gene_counts$sample), function(barcode) {
+  counts &lt;- gene_counts[gene_counts$sample == barcode, ]
+  df &lt;- centroids - counts[match(rownames(centroids), counts$gene), ]$counts
+  subtype &lt;- colnames(centroids)[which.max(table(apply(df, 1, which.min)))]
+  c(barcode = substr(as.character(barcode), 1, 12), subtype = subtype)
+  })
+perf &lt;- merge(known_clusters, test_clusters, by = &quot;barcode&quot;)
+# Accuracy
+sum(perf$subtype.x == perf$subtype.y)/nrow(perf)
+</code></pre>
+
+<pre><code>## [1] 0.273913
+</code></pre>
+
+<p>I really can&#39;t get a higher accuracy off of this. Maybe we&#39;ll just have to deal with 75%&hellip;&hellip;&hellip;.</p>
+
+<p>Same code as first attempt.</p>
+
+<pre><code class="r">clusters &lt;- ldply(unique(scaled_gene_counts$sample), function(barcode) {
+  counts &lt;- scaled_gene_counts[scaled_gene_counts$sample == barcode, ]
+  subtype &lt;- names(which.min(sqrt(colSums((centroids - counts[match(rownames(centroids), counts$gene), ]$counts)^2))))
+  c(barcode = substr(as.character(barcode), 1, 12), subtype = subtype)
+  })
+clusters[match(known_clusters$barcode, clusters$barcode), ]$subtype &lt;- known_clusters$subtype
+save(file = &#39;clusters.RData&#39;, clusters)
+</code></pre>
+
+<pre><code class="r">table(clusters$subtype)
+</code></pre>
+
+<pre><code>## 
+##  PI  PP TRU 
+## 194  93 224
+</code></pre>
 
 <pre><code class="r">save.session(&quot;cluster-subtypes.RSession&quot;)
-</code></pre>
-
-<pre><code>## Saving search path..
-## Saving list of loaded packages..
-## Saving all data...
-## Done.
 </code></pre>
 
 </body>

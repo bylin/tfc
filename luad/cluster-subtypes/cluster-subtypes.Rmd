@@ -10,6 +10,8 @@ opts_chunk$set(cache = TRUE, cache.path = "/inside/grotto/blin/trna-markers/luad
 library(stringr)
 library(plyr)
 library(reshape2)
+library(parallel)
+library(sva)
 ```
 
 Prediction of clinical covariates for lung adenocarcinoma only worked for predicting cancer incidence. This may be because the signal is muddled by heterogeneity in the samples. One solution to this is to separate the cancer into its three molecular subtypes first described [here](http://journals.plos.org/plosone/article?id=10.1371/journal.pone.0036530). Here's how they did it:
@@ -42,38 +44,134 @@ gene_counts <- ldply(1:nrow(luad_clinical), function(i) {
   strings <- unlist(str_split(expression$gene_id, "\\|"))
   data.frame(gene = strings[seq(1, length(strings), 2)], id = as.factor(strings[seq(2, length(strings), 2)]), counts = expression$normalized_count, sample = as.factor(row$barcode), stringsAsFactors = FALSE)
   })
-```
 
-### Standardize counts
-
-```{r gene-estimates}
-means <- dcast(gene_counts, gene + id ~ ., value.var = "counts", fun.aggregate = mean)
-sds <- dcast(gene_counts, gene + id ~ ., value.var = "counts", fun.aggregate = sd)
-means <- means[match(gene_counts$id, means$id)]
-sds <- sds[match(gene_counts$id, means$id)]
-gene_counts$counts <- (means - gene_counts$counts) / sds
-```
-
-```{r load-centroids}
 centroids <- read.table('centroids.tab', stringsAsFactors = FALSE, header = TRUE)
 gene_counts <- gene_counts[gene_counts$gene %in% rownames(centroids), ]
 centroids <- centroids[rownames(centroids) %in% gene_counts$gene, ]
 ```
 
+### Standardize counts
+
+```{r gene-estimates}
+scaled_gene_counts <- gene_counts
+means <- dcast(scaled_gene_counts, gene + id ~ ., value.var = "counts", fun.aggregate = mean)
+sds <- dcast(scaled_gene_counts, gene + id ~ ., value.var = "counts", fun.aggregate = sd)
+means <- means[match(scaled_gene_counts$id, means$id), ]
+sds <- sds[match(scaled_gene_counts$id, means$id), ]
+scaled_gene_counts$counts <- (scaled_gene_counts$counts - means$.) / sds$. 
+```
+
 ## Test centroid prediction
 
-Prediction is simple and doesn't require a package. *N* samples have *M* genes, with expression values *x*<sub>m</sub>. There are *S* subtypes, where *μ*<sub>s</sub> is a vector of length *M* with all the centroids (centroids.tab). For each subtype *s*, we calculate the Euclidean distance between sample *n* and *μ*<sub>s</sub>. The sample is classified to the subtype with the lowest distance.
+Prediction is simple and doesn't require a package. *N* samples have *M* genes, with expression values *x*<sub>m</sub>. There are *S* subtypes, where *μ*<sub>s</sub> is a vector of length *M* with all the centroids (centroids.tab). For each subtype *s*, we calculate the Euclidean distance between sample *n* and *μ*<sub>s</sub>. The sample is classified to the subtype with the lowest distance. The problem with this approach is that it requires the original estimates of mean and standard deviation, which we don't have but can calculate (sort of).
+
+Alternatively, we can compare the difference *x*<sub>mn</sub> with *μ*<sub>n</sub>, and the minimum difference would cast a "vote" for that subtype. Let's try Euclidean first, then see what happens.
 
 ```{r load-known-classifs}
 known_clusters <- read.table('known_clusters.tab', stringsAsFactors = FALSE, header = TRUE)
-test_counts <- gene_counts[substr(gene_counts$sample, 1, 12) %in% known_clusters$barcode, ]
+scaled_gene_counts <- scaled_gene_counts[substr(scaled_gene_counts$sample, 1, 12) %in% known_clusters$barcode, ]
+```
+
+```{r classify-known}
+test_clusters <- ldply(unique(scaled_gene_counts$sample), function(barcode) {
+  counts <- scaled_gene_counts[scaled_gene_counts$sample == barcode, ]
+  subtype <- names(which.min(sqrt(colSums((centroids - counts[match(rownames(centroids), counts$gene), ]$counts)^2))))
+  c(barcode = substr(as.character(barcode), 1, 12), subtype = subtype)
+  })
+perf <- merge(known_clusters, test_clusters, by = "barcode")
+# Accuracy
+sum(perf$subtype.x == perf$subtype.y)/nrow(perf)
+```
+
+```{r classify-known-2}
+test_clusters <- ldply(unique(scaled_gene_counts$sample), function(barcode) {
+  counts <- scaled_gene_counts[scaled_gene_counts$sample == barcode, ]
+  df <- centroids - counts[match(rownames(centroids), counts$gene), ]$counts
+  subtype <- colnames(centroids)[which.max(table(apply(df, 1, which.min)))]
+  c(barcode = substr(as.character(barcode), 1, 12), subtype = subtype)
+  })
+perf <- merge(known_clusters, test_clusters, by = "barcode")
+# Accuracy
+sum(perf$subtype.x == perf$subtype.y)/nrow(perf)
+```
+
+Okay, neither of those worked. Let's use log2 fold change and see if that works better.
+
+```{r gene-estimates-2}
+scaled_gene_counts <- gene_counts
+means <- dcast(scaled_gene_counts, gene + id ~ ., value.var = "counts", fun.aggregate = mean)
+log2fc <- ldply(mclapply(1:nrow(gene_counts), function(i) {
+  row <- gene_counts[i, ]
+  data.frame(gene = row$gene, log2fc = log2(means[means$gene == row$gene, ]$./(row$counts+1)), sample = row$sample)
+  }, mc.cores = 20), identity)
+scaled_gene_counts <- merge(scaled_gene_counts, log2fc, by = c("gene", "sample"))
 ```
 
 
-## Predict rest of data
+
+```{r classify-known-3}
+test_clusters <- ldply(unique(scaled_gene_counts$sample), function(barcode) {
+  counts <- scaled_gene_counts[scaled_gene_counts$sample == barcode, ]
+  subtype <- names(which.min(sqrt(colSums((centroids - counts[match(rownames(centroids), counts$gene), ]$log2fc)^2))))
+  c(barcode = substr(as.character(barcode), 1, 12), subtype = subtype)
+  })
+perf <- merge(known_clusters, test_clusters, by = "barcode")
+# Accuracy
+sum(perf$subtype.x == perf$subtype.y)/nrow(perf)
+
+test_clusters <- ldply(unique(scaled_gene_counts$sample), function(barcode) {
+  counts <- scaled_gene_counts[scaled_gene_counts$sample == barcode, ]
+  df <- centroids - counts[match(rownames(centroids), counts$gene), ]$log2fc
+  subtype <- colnames(centroids)[which.max(table(apply(df, 1, which.min)))]
+  c(barcode = substr(as.character(barcode), 1, 12), subtype = subtype)
+  })
+perf <- merge(known_clusters, test_clusters, by = "barcode")
+# Accuracy
+sum(perf$subtype.x == perf$subtype.y)/nrow(perf)
+```
+
+Next attempt, raw counts
+
+```{r classify-known-4}
+test_clusters <- ldply(unique(gene_counts$sample), function(barcode) {
+  counts <- gene_counts[gene_counts$sample == barcode, ]
+  subtype <- names(which.min(sqrt(colSums((centroids - counts[match(rownames(centroids), counts$gene), ]$counts)^2))))
+  c(barcode = substr(as.character(barcode), 1, 12), subtype = subtype)
+  })
+perf <- merge(known_clusters, test_clusters, by = "barcode")
+# Accuracy
+sum(perf$subtype.x == perf$subtype.y)/nrow(perf)
+
+test_clusters <- ldply(unique(gene_counts$sample), function(barcode) {
+  counts <- gene_counts[gene_counts$sample == barcode, ]
+  df <- centroids - counts[match(rownames(centroids), counts$gene), ]$counts
+  subtype <- colnames(centroids)[which.max(table(apply(df, 1, which.min)))]
+  c(barcode = substr(as.character(barcode), 1, 12), subtype = subtype)
+  })
+perf <- merge(known_clusters, test_clusters, by = "barcode")
+# Accuracy
+sum(perf$subtype.x == perf$subtype.y)/nrow(perf)
+```
 
 
+I really can't get a higher accuracy off of this. Maybe we'll just have to deal with 75%..........
 
-```{r save-session, cache=FALSE}
+Same code as first attempt.
+
+```{r cluster}
+clusters <- ldply(unique(scaled_gene_counts$sample), function(barcode) {
+  counts <- scaled_gene_counts[scaled_gene_counts$sample == barcode, ]
+  subtype <- names(which.min(sqrt(colSums((centroids - counts[match(rownames(centroids), counts$gene), ]$counts)^2))))
+  c(barcode = substr(as.character(barcode), 1, 12), subtype = subtype)
+  })
+clusters[match(known_clusters$barcode, clusters$barcode), ]$subtype <- known_clusters$subtype
+save(file = 'clusters.RData', clusters)
+```
+
+```{r stats}
+table(clusters$subtype)
+```
+
+```{r save-session, cache=FALSE, eval=FALSE}
 save.session("cluster-subtypes.RSession")
 ```
