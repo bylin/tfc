@@ -186,8 +186,14 @@ prad_normalized_counts <- normalizeCounts(prad_raw_counts, prad_metadata)
 
 MA plots are log mean of counts (x axis) vs log fold change (y axis). But we don't need log mean of counts, mean of counts should do nicely.
 
-```{r normalization-ma, fig.width=8, fig.height=3, fig.show='hold'}
-plotMA <- function(raw_counts, normalized_counts, metadata) {
+```{r normalization-ma, fig.width=12, fig.height=4, fig.show='hold'}
+plotMA <- function(raw_counts, normalized_counts, metadata, srnas) {
+  srnas$class <- as.character(srnas$class)
+  srnas[str_detect(srnas$class, "mi")]$class <- "miRNA"
+  srnas[srnas$class %in% c("trf-1", "trf-3", 'trf-5', 'actRF-3', 'actRF-5')]$class <- "tsRNA"
+  srnas[srnas$class %in% c('fivehalf', 'threehalf')]$class <- 'tRNA half'
+  srnas[srnas$class %in% c("tRNA-5p", "tRNA-3p", "trailer")]$class <- 'tRNA flanking'
+
   tp_barcodes <- metadata[metadata$sample_type == "TP" & metadata$barcode %in% colnames(normalized_counts), ]$barcode
   nt_barcodes <- metadata[metadata$sample_type == "NT" & metadata$barcode %in% colnames(normalized_counts), ]$barcode
   # just use pseudocounts - this is just diagnostic and not used in actual data.
@@ -195,13 +201,13 @@ plotMA <- function(raw_counts, normalized_counts, metadata) {
   raw_nt_counts <- rowMeans(raw_counts[, nt_barcodes]) + 1
   tp_counts <- rowMeans(normalized_counts[, tp_barcodes]) + 1
   nt_counts <- rowMeans(normalized_counts[, nt_barcodes]) + 1
-  df <- rbind(data.frame(log2FC = log2(raw_tp_counts) - log2(raw_nt_counts), counts = log2((raw_tp_counts + raw_nt_counts)/2), normalized = "Raw"),
-              data.frame(log2FC = log2(tp_counts) - log2(nt_counts), counts = log2((tp_counts + nt_counts)/2), normalized = "Normalized"))
-  ggplot(df) + geom_point(aes(x = counts, y = log2FC)) + geom_hline(yintercept = 0, color = "red") + facet_wrap(~ normalized)
+  df <- rbind(data.frame(log2FC = log2(raw_tp_counts) - log2(raw_nt_counts), log2counts = log2((raw_tp_counts + raw_nt_counts)/2), normalized = "Raw", sRNA = srnas$class[match(names(raw_tp_counts), srnas$tx_name)]),
+              data.frame(log2FC = log2(tp_counts) - log2(nt_counts), log2counts = log2((tp_counts + nt_counts)/2), normalized = "Normalized", sRNA = srnas$class[match(names(tp_counts), srnas$tx_name)]))
+  ggplot(df) + geom_point(aes(x = log2counts, y = log2FC, color = sRNA), size = 1, alpha = 0.3) + geom_hline(yintercept = 0, color = "red") + facet_wrap(~ normalized)
 }
-plotMA(luad_raw_counts, luad_normalized_counts, luad_metadata) + ggtitle("LUAD MA plot")
-plotMA(brca_raw_counts, brca_normalized_counts, brca_metadata) + ggtitle("BRCA MA plot")
-plotMA(prad_raw_counts, prad_normalized_counts, prad_metadata) + ggtitle("PRAD MA plot")
+plotMA(luad_raw_counts, luad_normalized_counts, luad_metadata, srnas) + ggtitle("LUAD MA plot")
+plotMA(brca_raw_counts, brca_normalized_counts, brca_metadata, srnas) + ggtitle("BRCA MA plot")
+plotMA(prad_raw_counts, prad_normalized_counts, prad_metadata, srnas) + ggtitle("PRAD MA plot")
 ```
 
 
