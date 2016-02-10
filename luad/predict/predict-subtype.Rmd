@@ -1,0 +1,159 @@
+# predict-subtype
+_Last modified `r format(Sys.time(), "%I:%M %p on %b %d, %Y")`. This document, R session image, version history, knitr cache, figures, and other associated datasets are located in `/inside/grotto/blin/trna-markers/luad/predict/`._
+
+```{r setup, echo=FALSE, warning=FALSE, results=FALSE, message=FALSE, errors=FALSE, cache=FALSE}
+library(knitr)
+opts_chunk$set(cache = TRUE, cache.path = "/inside/grotto/blin/trna-markers/luad/predict/cache/predict-subtype/", eval = TRUE, echo = TRUE, warning = FALSE, results = FALSE, message = FALSE, autodep = TRUE, dev = "png", dpi = 300)
+```
+
+```{r libraries, cache=FALSE}
+library(plyr)
+library(glmnet)
+library(ROCR)
+library(GenomicRanges)
+library(stringr)
+library(reshape2)
+library(caret)
+set.seed(12)
+source('predict.R')
+load('/inside/home/blin/grotto/data/hg19-srnas.RData')
+load('/inside/home/blin/grotto/trna-markers/process-reads/luad-counts.RData')
+luad_clinical <- luad_clinical[match(colnames(luad_adjusted_counts), luad_clinical$barcode), ]
+ntrials <- 100
+```
+
+## Predict subtype with GLMs
+
+Lung adenocarcinoma comes in three main subtypes: PI, PP, and TRU. Let's test out what multinomial classification does.
+
+```{r load}
+# load cluster information
+load('/inside/grotto/blin/trna-markers/luad/cluster-subtypes/clusters.RData')
+clusters <- clusters[clusters$known, ]
+cluster_metadata <- luad_clinical[substr(luad_clinical$barcode, 1, 12) %in% clusters$barcode, ]
+cluster_metadata$subtype <- as.factor(clusters$subtype[match(substr(cluster_metadata$barcode, 1, 12), clusters$barcode)])
+
+# features
+tsrnas <- unique(srnas[srnas$class %in% c("trf-1", "trf-3", "trf-5", "actRF-3", "actRF-5", "fivehalf", "threehalf", "trailer")]$tx_name)
+#tsrnas <- unique(srnas[srnas$class %in% c("fivehalf", "threehalf", "trailer")]$tx_name)
+mirnas <- unique(srnas[str_detect(srnas$class, "mi")]$tx_name)
+snornas <- unique(srnas[srnas$class == "snoRNA"]$tx_name)
+```
+
+```{r test}
+buildMultinomialGlms <- function(metadata, counts, covariate, features, randomize = FALSE) {
+  # set up training/testing sets. first, set parameters
+  dataset <- setupTrainingTestingSets(metadata, covariate, counts)
+  training_counts <- t(dataset$training_counts[rownames(dataset$training_counts) %in% features, ])
+  training_response <- dataset$training_metadata[match(colnames(dataset$training_counts), dataset$training_metadata$barcode), ][, covariate]
+  testing_counts <- t(dataset$testing_counts[rownames(dataset$testing_counts) %in% features, ])
+  testing_response <- dataset$testing_metadata[match(colnames(dataset$testing_counts), dataset$testing_metadata$barcode), ][, covariate]
+  if (randomize) testing_response <- sample(testing_response)
+
+  # build model
+  cv <- cv.glmnet(training_counts, training_response, alpha = 1, family = "multinomial")
+  model = glmnet(training_counts, training_response, lambda = cv$lambda.min, family = "multinomial")
+  pred <- predict(model, newx = testing_counts, type = "class")
+  confusionMatrix(pred, testing_response)
+  # test model
+  #chosen_model <- which.min(abs(best_model$df - 30)) # select for ~ 20 features)
+  #pred <- predict(model, newx = testing_counts, s = model$lambda[chosen_model])
+  pred <- predict(cv, newx = testing_counts, type = "class")
+  acc <- apply(pred, 2, function(col) {
+    col <- factor(col,  levels = c("PI", "PP", "TRU"))
+    confusionMatrix(col, testing_response)$overall
+  })
+  #list(model$df[which.max(acc[1, ])], acc[1, which.max(acc[1, ])],  confusionMatrix(pred[, which.max(acc[1, ])], testing_response), model, pred)
+  acc[1, which.max(acc[1, ])]
+}
+```
+
+```{r subtype-accuracy}
+metadata <- cluster_metadata[cluster_metadata$sample_type == "TP", ]
+counts <- luad_adjusted_counts[, colnames(luad_adjusted_counts) %in% metadata$barcode]
+mirna_subtype_acc <- sapply(1:ntrials, function(i) buildMultinomialGlms(metadata, counts, "subtype", mirnas))
+tsrna_subtype_acc <- sapply(1:ntrials, function(i) buildMultinomialGlms(metadata, counts, "subtype", tsrnas))
+snorna_subtype_acc <- sapply(1:ntrials, function(i) buildMultinomialGlms(metadata, counts, "subtype", mirnas))
+permuted_subtype_acc <- sapply(1:ntrials, function(i) buildMultinomialGlms(metadata, counts, "subtype", tsrnas, randomize = TRUE))
+buildMultinomialGlms(cluster_metadata, luad_adjusted_counts[, colnames(luad_adjusted_counts) %in% cluster_metadata$barcode], "subtype", tsrnas)
+buildMultinomialGlms(metadata = metadata, counts = counts, covariate = "subtype", features = tsrnas)
+```
+
+```{r plot-subtype-accuracy, fig.width=8, fig.height=5}
+df <- data.frame(tsRNA = tsrna_subtype_acc, miRNA = mirna_subtype_acc, snoRNA = snorna_subtype_acc, Permuted = permuted_subtype_acc)
+df <- melt(df)
+colnames(df) <- c("Features", "Accuracy")
+ggplot(df) + geom_boxplot(aes(x = Features, y = Accuracy, color = Features))
+```
+
+# for multinomial, set up different training response factor levels
+y <- metadata$subtype
+levels(y) <- c("PI", "PP", "TRU", "Undet")
+y <- factor(y, c("Undet", "PI", "PP", "TRU"))
+metadata <- cbind(metadata, model.matrix(~ y)[, 2:4])
+
+## Separate by subtype
+
+
+
+```{r subtype-sample-type, fig.width=20, fig.height=8, eval=FALSE}
+metadata <- cluster_metadata
+
+metadata <- cluster_metadata[cluster_metadata$subtype == "TRU", ]
+metadata$sample_type <- as.factor(metadata$sample_type)
+counts <- luad_adjusted_counts[, colnames(luad_adjusted_counts) %in% metadata$barcode]
+buildTestCompareGlms(metadata = metadata, covariate = "sample_type", counts = counts, ntrials = ntrials)$plot
+
+metadata <- cluster_metadata[cluster_metadata$subtype == "PP", ]
+metadata$sample_type <- as.factor(metadata$sample_type)
+counts <- luad_adjusted_counts[, colnames(luad_adjusted_counts) %in% metadata$barcode]
+buildTestCompareGlms(metadata = metadata, covariate = "sample_type", counts = counts, ntrials = ntrials)$plot
+
+metadata <- cluster_metadata[cluster_metadata$subtype == "PI", ]
+metadata$sample_type <- as.factor(metadata$sample_type)
+counts <- luad_adjusted_counts[, colnames(luad_adjusted_counts) %in% metadata$barcode]
+buildTestCompareGlms(metadata = metadata, covariate = "sample_type", counts = counts, ntrials = ntrials)$plot
+```
+
+
+```{r subtype-metastasis, fig.width=20, fig.height=8, eval=FALSE}
+metadata <- cluster_metadata[cluster_metadata$m_stage %in% c("M0", "M1", "M1a", "M1b") & cluster_metadata$subtype == "TRU", ]
+counts <- luad_adjusted_counts[, colnames(luad_adjusted_counts) %in% metadata$barcode]
+metadata$metastasis <- as.factor(ifelse(metadata$m_stage == "M0", "No metastasis" , "Metastasis"))
+buildTestCompareGlms(metadata = metadata, covariate = "metastasis", counts = counts, ntrials = ntrials)$plot
+
+
+metadata <- cluster_metadata[cluster_metadata$m_stage %in% c("M0", "M1", "M1a", "M1b") & cluster_metadata$subtype == "PP", ]
+counts <- luad_adjusted_counts[, colnames(luad_adjusted_counts) %in% metadata$barcode]
+metadata$metastasis <- as.factor(ifelse(metadata$m_stage == "M0", "No metastasis" , "Metastasis"))
+buildTestCompareGlms(metadata = metadata, covariate = "metastasis", counts = counts, ntrials = ntrials)$plot
+
+
+metadata <- cluster_metadata[cluster_metadata$m_stage %in% c("M0", "M1", "M1a", "M1b") & cluster_metadata$subtype == "PI", ]
+counts <- luad_adjusted_counts[, colnames(luad_adjusted_counts) %in% metadata$barcode]
+metadata$metastasis <- as.factor(ifelse(metadata$m_stage == "M0", "No metastasis" , "Metastasis"))
+buildTestCompareGlms(metadata = metadata, covariate = "metastasis", counts = counts, ntrials = ntrials)$plot
+```
+
+```{r subtype-early-progression, fig.width=20, fig.height=8, eval=FALSE}
+metadata <- cluster_metadata[cluster_metadata$stage != "[Not Available]" & cluster_metadata$subtype == "TRU", ]
+counts <- luad_adjusted_counts[, colnames(luad_adjusted_counts) %in% metadata$barcode]
+metadata$stage <- as.factor(ifelse(metadata$stage %in% c("Stage I", "Stage IA", "Stage IB"), "Not progressed" , "Progressed"))
+buildTestCompareGlms(metadata = metadata, covariate = "stage", counts = counts, ntrials = ntrials)$plot
+
+metadata <- cluster_metadata[cluster_metadata$stage != "[Not Available]" & cluster_metadata$subtype == "PP", ]
+counts <- luad_adjusted_counts[, colnames(luad_adjusted_counts) %in% metadata$barcode]
+metadata$stage <- as.factor(ifelse(metadata$stage %in% c("Stage I", "Stage IA", "Stage IB"), "Not progressed" , "Progressed"))
+buildTestCompareGlms(metadata = metadata, covariate = "stage", counts = counts, ntrials = ntrials)$plot
+
+metadata <- cluster_metadata[cluster_metadata$stage != "[Not Available]" & cluster_metadata$subtype == "PI", ]
+counts <- luad_adjusted_counts[, colnames(luad_adjusted_counts) %in% metadata$barcode]
+metadata$stage <- as.factor(ifelse(metadata$stage %in% c("Stage I", "Stage IA", "Stage IB"), "Not progressed" , "Progressed"))
+buildTestCompareGlms(metadata = metadata, covariate = "stage", counts = counts, ntrials = ntrials)$plot
+```
+
+
+
+```{r save-session, eval=FALSE}
+save.session("predict-subtype.RSession")
+```
