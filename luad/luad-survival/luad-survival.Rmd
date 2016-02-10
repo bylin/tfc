@@ -9,41 +9,77 @@ opts_chunk$set(cache = TRUE, cache.path = "/inside/grotto/blin/trna-markers/luad
 ```{r libraries, cache=FALSE}
 library(survival)
 source('/inside/home/blin/lib/R/ggsurv.R')
-load('/inside/grotto/blin/trna-markers/more-cancers/luad-metadata.RData')
-load('/inside/grotto/blin/trna-markers/more-cancers/luad-counts.RData')
+load('/inside/home/blin/grotto/data/hg19-srnas.RData')
+load('/inside/home/blin/grotto/trna-markers/process-reads/luad-counts.RData')
+luad_clinical <- luad_clinical[match(colnames(luad_adjusted_counts), luad_clinical$barcode), ]
 ```
 
-```{r km-plot, out.width = "400px", fig.show = "hold"}
-filtered_luad_clinical <- na.omit(luad_clinical[luad_clinical$sample_type != "NT" & luad_clinical$days_survived > 30 & luad_clinical$days_survived < 3000, ]) # get rid of NAs, remove normal samples (e.g. duplicates), and put the time period as 1 month - 8 years
-km_initial <- survfit(Surv(days_survived, vital_status) ~ 1, data = filtered_luad_clinical)
-ggsurv(km_initial) + theme_bw() + ggtitle("Kaplan-Meier plot")
-km_stage <- survfit(Surv(days_survived, vital_status) ~ t_stage, data = filtered_luad_clinical)
-ggsurv(km_stage) + theme_bw() + ggtitle("Kaplan-Meier plot grouped by T stage")
-km_gleason <- survfit(Surv(days_survived, vital_status) ~ smoker, data = filtered_luad_clinical)
-ggsurv(km_gleason) + theme_bw() + ggtitle("Kaplan-Meier plot grouped by smoking history")
-km_gleason <- survfit(Surv(days_survived, vital_status) ~ gender, data = filtered_luad_clinical)
-ggsurv(km_gleason) + theme_bw() + ggtitle("Kaplan-Meier plot grouped by gender")
-km_gleason <- survfit(Surv(days_survived, vital_status) ~ age, data = filtered_luad_clinical)
-ggsurv(km_gleason) + theme_bw() + ggtitle("Kaplan-Meier plot grouped by age group")
-table(luad_clinical$t_stage)
-table(luad_clinical$smoker)
-table(luad_clinical$gender)
-table(luad_clinical$age)
+### Overall survival
+
+```{r km-plot}
+km_metadata <- na.omit(luad_clinical[luad_clinical$sample_type != "NT", ]) # get rid of NAs, remove normal samples (e.g. duplicates), and put the time period as 1 month - 8 years
+km <- survfit(Surv(days_survived, vital_status) ~ 1, data = km_metadata)
+ggsurv(km) + theme_bw() + ggtitle("Kaplan-Meier plot")
 ```
 
-Now, to perform univariate survival analyses on known clinical covariates (age, cancer stage, gleason score) using the Cox proportional hazards model.
+### Subtype
 
-```{r univariate-cox-regression-function}
-cox_stage <- coxph(Surv(days_survived, vital_status) ~ t_stage, data = filtered_luad_clinical)
-summary(cox_stage)
-cox_smoker <- coxph(Surv(days_survived, vital_status) ~ smoker, data = filtered_luad_clinical)
-summary(cox_smoker)
-cox_smoker <- coxph(Surv(days_survived, vital_status) ~ gender, data = filtered_luad_clinical)
-summary(cox_gender)
-cox_age <- coxph(Surv(days_survived, vital_status) ~ age, data = filtered_luad_clinical)
-summary(cox_age)
+```{r km-subtype}
+load('/inside/grotto/blin/trna-markers/luad/cluster-subtypes/clusters.RData')
+clusters <- clusters[clusters$known, ]
+metadata <- km_metadata[substr(km_metadata$barcode, 1, 12) %in% clusters$barcode, ]
+metadata$subtype <- as.factor(clusters$subtype[match(substr(metadata$barcode, 1, 12), clusters$barcode)])
+ggsurv(survfit(Surv(days_survived, vital_status) ~ subtype, data = metadata)) + theme_bw() + ggtitle("Kaplan-Meier plot grouped by subtype")
+table(metadata$subtype)
+cox <- coxph(Surv(days_survived, vital_status) ~ subtype, data = metadata)
+summary(cox)
 ```
+
+### Age
+
+```{r km-age}
+metadata <- km_metadata
+metadata$age <- cut(as.integer(as.character(metadata$age)), breaks = c(0, 50, 65, 80, 100), labels = c("<50", "50-65", "65-80", "80+"))
+km <- survfit(Surv(days_survived, vital_status) ~ age, data = metadata)
+ggsurv(km) + theme_bw() + ggtitle("Kaplan-Meier plot grouped by age group")
+table(metadata$age)
+cox <- coxph(Surv(days_survived, vital_status) ~ age, data = metadata)
+summary(cox)
+```
+
+### Tumor stage
+
+```{r km-stage}
+metadata <- km_metadata[km_metadata$stage %in% c("Stage I", "Stage IA", "Stage IIIA", "Stage IIIB", "Stage IV"), ]
+metadata$stage <- as.factor(ifelse(metadata$stage %in% c("Stage I", "Stage IA"), "Early stage" , "Late stage"))
+km <- survfit(Surv(days_survived, vital_status) ~ stage, data = metadata)
+ggsurv(km) + theme_bw() + ggtitle("Kaplan-Meier plot grouped by stage")
+table(metadata$stage)
+cox <- coxph(Surv(days_survived, vital_status) ~ stage, data = metadata)
+summary(cox)
+```
+
+### Smoker vs non-smoker
+
+```{r km-smoking}
+km <- survfit(Surv(days_survived, vital_status) ~ smoker, data = km_metadata)
+ggsurv(km) + theme_bw() + ggtitle("Kaplan-Meier plot grouped by smoking history")
+table(metadata$smoker)
+cox <- coxph(Surv(days_survived, vital_status) ~ smoker, data = metadata)
+summary(cox)
+```
+
+### Gender
+
+```{r km-gender}
+km <- survfit(Surv(days_survived, vital_status) ~ gender, data = km_metadata)
+ggsurv(km) + theme_bw() + ggtitle("Kaplan-Meier plot grouped by gender")
+table(km_metadata$gender)
+cox <- coxph(Surv(days_survived, vital_status) ~ gender, data = metadata)
+summary(cox)
+```
+
 
 ```{r save-image, cache=FALSE}
-save.image("luad-survival-image.RData")
+save.session("luad-survival.RSession")
 ```
