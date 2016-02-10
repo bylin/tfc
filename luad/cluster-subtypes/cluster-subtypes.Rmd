@@ -164,6 +164,7 @@ clusters <- ldply(unique(scaled_gene_counts$sample), function(barcode) {
   subtype <- names(which.min(sqrt(colSums((centroids - counts[match(rownames(centroids), counts$gene), ]$counts)^2))))
   c(barcode = substr(as.character(barcode), 1, 12), subtype = subtype)
   })
+clusters$known <- ifelse(clusters$barcode %in% known_clusters$barcode, TRUE, FALSE)
 clusters[match(known_clusters$barcode, clusters$barcode), ]$subtype <- known_clusters$subtype
 save(file = 'clusters.RData', clusters)
 ```

@@ -203,7 +203,7 @@ hr {
 <body>
 <h1>Cluster LUAD samples by subtype</h1>
 
-<p><em>Last modified 09:26 PM on Jan 20, 2016. This document, R session image, version history, knitr cache, figures, and other associated datasets are located in <code>/inside/grotto/blin/trna-markers/luad/cluster-subtypes/</code>.</em></p>
+<p><em>Last modified 10:04 PM on Feb 01, 2016. This document, R session image, version history, knitr cache, figures, and other associated datasets are located in <code>/inside/grotto/blin/trna-markers/luad/cluster-subtypes/</code>.</em></p>
 
 <pre><code class="r">library(stringr)
 library(plyr)
@@ -379,6 +379,7 @@ sum(perf$subtype.x == perf$subtype.y)/nrow(perf)
   subtype &lt;- names(which.min(sqrt(colSums((centroids - counts[match(rownames(centroids), counts$gene), ]$counts)^2))))
   c(barcode = substr(as.character(barcode), 1, 12), subtype = subtype)
   })
+clusters$known &lt;- ifelse(clusters$barcode %in% known_clusters$barcode, TRUE, FALSE)
 clusters[match(known_clusters$barcode, clusters$barcode), ]$subtype &lt;- known_clusters$subtype
 save(file = &#39;clusters.RData&#39;, clusters)
 </code></pre>
