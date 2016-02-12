@@ -44,11 +44,11 @@ buildTestGlm <- function(dataset, features, covariate, randomize = FALSE) {
   testing_response <- dataset$testing_metadata[match(colnames(dataset$testing_counts), dataset$testing_metadata$barcode), ][, covariate]
   if (randomize) training_response <- sample(training_response)
   model <- cv.glmnet(training_counts, training_response, type.measure = "auc", family = "binomial")
-  pred <- predict(model, newx = testing_counts, s = "lambda.min", type = "class") 
+  pred <- predict(model, newx = testing_counts, s = "lambda.min") 
   prob <- prediction(pred, testing_response)
   perf <- performance(prob, "tpr", "fpr")
   roc <- data.frame(TPR = unlist(perf@y.values), FPR = unlist(perf@x.values))
-  coef <- model$beta
+  coef <- model$glmnet.fit$beta[, model$glmnet.fit$lambda == model$lambda.min]
   coef <- coef[coef != 0]
   auc <- unlist(performance(prob, "auc")@y.values)
   auc <- round(auc, 3)
