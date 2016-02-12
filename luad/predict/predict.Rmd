@@ -142,12 +142,14 @@ plotAucs(early_progression$glms)
 
 ```{r extract-coefs}
 tsrna_coefs <- c(extractCoefs(sample_type$glms[[1]], ntrials), extractCoefs(stage_coarse$glms[[1]], ntrials))
-table(names(tsrna_coefs))
-length(table(names(tsrna_coefs)))
+tsrna_coefs <- table(names(tsrna_coefs))
+tsrna_coefs[tsrna_coefs > 1, ]
+length(tsrna_coefs[tsrna_coefs > 1, ])
 
 mirna_coefs <- c(extractCoefs(sample_type$glms[[1]], ntrials), extractCoefs(stage_coarse$glms[[1]], ntrials))
-table(names(mirna_coefs))
-length(table(names(mirna_coefs)))
+mirna_coefs <- table(names(mirna_coefs))
+tsrna_coefs[mirna_coefs > 1, ]
+length(tsrna_coefs[mirna_coefs > 1, ])
 ```
 
 
