@@ -48,7 +48,7 @@ buildTestGlm <- function(dataset, features, covariate, randomize = FALSE) {
   prob <- prediction(pred, testing_response)
   perf <- performance(prob, "tpr", "fpr")
   roc <- data.frame(TPR = unlist(perf@y.values), FPR = unlist(perf@x.values))
-  coef <- model$beta[, chosen_model]
+  coef <- model$beta
   coef <- coef[coef != 0]
   auc <- unlist(performance(prob, "auc")@y.values)
   auc <- round(auc, 3)
