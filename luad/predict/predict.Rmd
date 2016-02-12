@@ -3,7 +3,7 @@ _Last modified `r format(Sys.time(), "%I:%M %p on %b %d, %Y")`. This document, R
 
 ```{r setup, echo=FALSE, warning=FALSE, results=FALSE, message=FALSE, errors=FALSE, cache=FALSE}
 library(knitr)
-opts_chunk$set(cache = TRUE, cache.path = "/inside/grotto/blin/trna-markers/luad/predict/predict-cache/", eval = TRUE, echo = TRUE, warning = FALSE, results = FALSE, message = FALSE, autodep = TRUE, dev = "png", dpi = 300)
+opts_chunk$set(cache = TRUE, cache.path = "/inside/grotto/blin/trna-markers/luad/predict/cache/predict/", eval = TRUE, echo = TRUE, warning = FALSE, results = FALSE, message = FALSE, autodep = TRUE, dev = "png", dpi = 300)
 ```
 
 ```{r libraries, cache=FALSE}
@@ -42,11 +42,10 @@ buildTestGlm <- function(dataset, features, covariate, randomize = FALSE) {
   training_response <- dataset$training_metadata[match(colnames(dataset$training_counts), dataset$training_metadata$barcode), ][, covariate]
   testing_counts <- t(dataset$testing_counts[rownames(dataset$testing_counts) %in% features, ])
   testing_response <- dataset$testing_metadata[match(colnames(dataset$testing_counts), dataset$testing_metadata$barcode), ][, covariate]
-  model <- glmnet(training_counts, training_response, family = "binomial")
-  chosen_model <- which.min(abs(model$df - 20)) # select for ~ 20 features)
-  pred <- predict(model, newx = testing_counts, s = model$lambda[chosen_model])
+  if (randomize) training_response <- sample(training_response)
+  model <- cv.glmnet(training_counts, training_response, type.measure = "auc", family = "binomial")
+  pred <- predict(model, newx = testing_counts, s = "lambda.min", type = "class") 
   prob <- prediction(pred, testing_response)
-  if (randomize) prob <- prediction(pred, sample(testing_response))
   perf <- performance(prob, "tpr", "fpr")
   roc <- data.frame(TPR = unlist(perf@y.values), FPR = unlist(perf@x.values))
   coef <- model$beta[, chosen_model]
