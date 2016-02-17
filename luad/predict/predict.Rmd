@@ -23,7 +23,7 @@ ntrials <- 200
 ## Generic function for classification of samples into discrete classes
 
 ```{r utility-functions}
-source('predict.R')
+source('predict.R') 
 ```
 
 ```{r build-test-compare-glms}
@@ -33,12 +33,10 @@ buildTestCompareGlms <- function(metadata, covariate, counts, ntrials) {
 
   # set up feature sets
   load('/inside/home/blin/grotto/data/hg19-srnas.RData')
-  tsrnas <- unique(srnas[srnas$class %in% c("trf-1", "trf-3", "trf-5", "actRF-3", "actRF-5", "trailer")]$tx_name)
+  tsrnas <- unique(srnas[srnas$class %in% c("fivehalf", "threehalf", "trailer")]$tx_name)
   mirnas <- unique(srnas[str_detect(srnas$class, "mi")]$tx_name)
   snornas <- unique(srnas[srnas$class == "snoRNA"]$tx_name)
   pirnas <- unique(srnas[srnas$class == "piRNA"]$tx_name)
-  halves <- unique(srnas[srnas$class %in% c("fivehalf", "threehalf")]$tx_name)
-  trnas <- unique(srnas[srnas$class == "tRNA"]$tx_name)
 
   # create training/testing sets and feature sets
   system(paste0('echo Setting up training/testing sets'))
@@ -54,12 +52,12 @@ buildTestCompareGlms <- function(metadata, covariate, counts, ntrials) {
   
   # build and predict testing data
   system(paste0('echo Building/testing models'))
-  all_feature_glms <- lapply(list(tsrnas, mirnas, snornas, pirnas, halves, trnas), function(features) {
+  all_feature_glms <- lapply(list(tsrnas, mirnas, snornas, pirnas), function(features) {
   	lapply(datasets, buildTestGlm, features = features, covariate = covariate, randomize = FALSE)
   	})
-  roc <- ldply(mapply(parseGlms, glms = all_feature_glms, class = c("tsRNA", "miRNA", "snoRNA", "piRNA", "tRNA half", "tRNA"), SIMPLIFY = FALSE), identity)
+  roc <- ldply(mapply(parseGlms, glms = all_feature_glms, class = c("tsRNA", "miRNA", "snoRNA", "piRNA"), SIMPLIFY = FALSE), identity)
   roc <- rbind(roc, control_roc)
-  roc$Class <- factor(roc$Class, levels = c("tsRNA", "miRNA", "snoRNA", "tsRNA, permuted", "piRNA", "tRNA half", "tRNA", "miRNA, permuted"))
+  roc$Class <- factor(roc$Class, levels = c("tsRNA", "miRNA", "tsRNA, permuted", "snoRNA", "piRNA", "miRNA, permuted"))
 
   # create plots
   system(paste0('echo Creating summary plot'))
@@ -83,11 +81,11 @@ metadata$sample_type <- as.factor(metadata$sample_type)
 sample_type <- buildTestCompareGlms(metadata = metadata, covariate = "sample_type", counts = luad_adjusted_counts, ntrials = ntrials)
 ```
 
-```{r sample-type-plot, fig.width=20, fig.height=8}
+```{r sample-type-plot, fig.width=15, fig.height=8}
 sample_type$plot
 ```
 
-```{r sample-type-auc-plot, fig.width=6, fig.height=6, out.width="400px"}
+```{r sample-type-auc-plot, fig.width=8, fig.height=6}
 plotAucs(sample_type$glms)
 ```
 
@@ -99,11 +97,11 @@ metadata$metastasis <- as.factor(ifelse(metadata$m_stage == "M0", "No metastasis
 metastasis <- buildTestCompareGlms(metadata = metadata, covariate = "metastasis", counts = counts, ntrials = ntrials)
 ```
 
-```{r metastasis-plot, fig.width=20, fig.height=8}
+```{r metastasis-plot, fig.width=15, fig.height=8}
 metastasis$plot
 ```
 
-```{r metastasis-auc-plot, fig.width=6, fig.height=6, out.width="400px"}
+```{r metastasis-auc-plot, fig.width=8, fig.height=6}
 plotAucs(metastasis$glms)
 ```
 
@@ -115,41 +113,32 @@ metadata$stage <- as.factor(ifelse(metadata$stage %in% c("Stage I", "Stage IA"),
 stage_coarse <- buildTestCompareGlms(metadata = metadata, covariate = "stage", counts = counts, ntrials = ntrials)
 ```
 
-```{r stage-coarse-plot, fig.width=20, fig.height=8}
+```{r stage-coarse-plot, fig.width=15, fig.height=8}
 stage_coarse$plot
 ```
 
-```{r stage-coarse-auc-plot, fig.width=6, fig.height=6, out.width="400px"}
+```{r stage-coarse-auc-plot, fig.width=8, fig.height=6}
 plotAucs(stage_coarse$glms)
 ```
 
-```{r early-progression}
-# stage I, IA, vs stage II, IIA, IIB, IIIA, IIIB - early progression
-metadata <- luad_clinical[luad_clinical$stage != "[Not Available]", ]
+
+```{r lymph}
+metadata <- luad_clinical[luad_clinical$stage %in% c("N0", "N1", "N2", "N3"), ]
 counts <- luad_adjusted_counts[, colnames(luad_adjusted_counts) %in% metadata$barcode]
-metadata$stage <- as.factor(ifelse(metadata$stage %in% c("Stage I", "Stage IA", "Stage IB"), "Not progressed" , "Progressed"))
-early_progression <- buildTestCompareGlms(metadata = metadata, covariate = "stage", counts = counts, ntrials = ntrials)
+metadata$n_stage <- as.factor(ifelse(metadata$stage %in% c("N0"), "N0" , "N1+"))
+lymph_spread <- buildTestCompareGlms(metadata = metadata, covariate = "stage", counts = counts, ntrials = ntrials)
 ```
-
-```{r early-progression-plot, fig.width=20, fig.height=8}
-early_progression$plot
-```
-
-```{r early-progression-auc-plot, fig.width=6, fig.height=6, out.width="400px"}
-plotAucs(early_progression$glms)
-```
-
 
 ```{r extract-coefs}
 tsrna_coefs <- c(extractCoefs(sample_type$glms[[1]], ntrials), extractCoefs(stage_coarse$glms[[1]], ntrials))
 tsrna_coefs <- table(names(tsrna_coefs))
-tsrna_coefs[tsrna_coefs > 1, ]
-length(tsrna_coefs[tsrna_coefs > 1, ])
+tsrna_coefs <- tsrna_coefs[tsrna_coefs > 1]
+length(tsrna_coefs[tsrna_coefs > 1])
 
 mirna_coefs <- c(extractCoefs(sample_type$glms[[1]], ntrials), extractCoefs(stage_coarse$glms[[1]], ntrials))
 mirna_coefs <- table(names(mirna_coefs))
-tsrna_coefs[mirna_coefs > 1, ]
-length(tsrna_coefs[mirna_coefs > 1, ])
+tsrna_coefs[mirna_coefs > 1]
+length(tsrna_coefs[mirna_coefs > 1])
 ```
 
 
