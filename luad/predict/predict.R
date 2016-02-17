@@ -13,11 +13,13 @@ setupTrainingTestingSets <- function(metadata, covariate, counts) {
   }))
   training_counts <-  counts[, metadata$barcode %in% random_sample]
   training_metadata <- metadata[metadata$barcode %in% random_sample, ]
-  random_sample_2 <- unlist(sapply(levels(metadata[, covariate]), function(class) {
-    sample(metadata[metadata[, covariate] == class & !(metadata$barcode %in% random_sample), ]$barcode, num_samples_per_class)
-  }))
-  testing_counts <- counts[, metadata$barcode %in% random_sample_2]
-  testing_metadata <- metadata[metadata$barcode %in% random_sample_2, ]
+  #random_sample_2 <- unlist(sapply(levels(metadata[, covariate]), function(class) {
+  #  sample(metadata[metadata[, covariate] == class & !(metadata$barcode %in% random_sample), ]$barcode, num_samples_per_class)
+  #}))
+  #testing_counts <- counts[, metadata$barcode %in% random_sample_2]
+  #testing_metadata <- metadata[metadata$barcode %in% random_sample_2, ]
+  testing_counts <- counts[, !(metadata$barcode %in% random_sample)]
+  testing_metadata <- metadata[!(metadata$barcode %in% random_sample), ]
   list(training_counts = training_counts, training_metadata = training_metadata, testing_counts = testing_counts, testing_metadata = testing_metadata)
 }
 
@@ -48,10 +50,10 @@ plotGlms <- function(roc_df) ggplot(roc_df) + geom_line(aes(x = FPR, y = TPR, co
 
 plotAucs <- function(all_feature_glms) {
   aucs <- ldply(all_feature_glms, function(glms) unlist(lapply(1:length(glms), function(i) glms[[i]]$auc)))
-  rownames(aucs) <- c("tsRNA", "miRNA", "snoRNA", "piRNA", "tRNA half", "tRNA")
+  rownames(aucs) <- c("tsRNA", "miRNA", "snoRNA", "piRNA")
   df <- melt(t(aucs))[, -1]
   colnames(df) <- c("sRNA", "AUC")
-  ggplot(df) + geom_boxplot(aes(x = sRNA, y = AUC)) + ggtitle("AUC distribution by sRNA type")
+  ggplot(df) + geom_boxplot(aes(x = sRNA, y = AUC)) + ggtitle("AUC distribution by sRNA type") + ylim(0, 1)
 }
 
 buildMultinomialGlm <- function(metadata, counts, covariate, features, randomize = FALSE) {
