@@ -75,6 +75,8 @@ buildTestCompareGlms <- function(metadata, covariate, counts, ntrials) {
 
 ```
 
+## Cancer incidence
+
 ```{r sample-type}
 metadata <- luad_clinical
 metadata$sample_type <- as.factor(metadata$sample_type)
@@ -89,6 +91,7 @@ sample_type$plot
 plotAucs(sample_type$glms)
 ```
 
+## Metastasis
 
 ```{r metastasis}
 metadata <- luad_clinical[luad_clinical$m_stage %in% c("M0", "M1", "M1a", "M1b"), ]
@@ -104,6 +107,8 @@ metastasis$plot
 ```{r metastasis-auc-plot, fig.width=8, fig.height=6}
 plotAucs(metastasis$glms)
 ```
+
+## Cancer stage
 
 ```{r stage-coarse}
 # stage I, IA vs stage IIIA, IIIB, IV - essentially spreading vs non-spreading
@@ -121,24 +126,31 @@ stage_coarse$plot
 plotAucs(stage_coarse$glms)
 ```
 
+## Lymph node spread
 
 ```{r lymph}
-metadata <- luad_clinical[luad_clinical$stage %in% c("N0", "N1", "N2", "N3"), ]
+metadata <- luad_clinical[luad_clinical$n_stage %in% c("N0", "N1", "N2", "N3"), ]
 counts <- luad_adjusted_counts[, colnames(luad_adjusted_counts) %in% metadata$barcode]
-metadata$n_stage <- as.factor(ifelse(metadata$stage %in% c("N0"), "N0" , "N1+"))
-lymph_spread <- buildTestCompareGlms(metadata = metadata, covariate = "stage", counts = counts, ntrials = ntrials)
+metadata$n_stage <- as.factor(ifelse(metadata$n_stage %in% c("N0"), "N0" , "N1+"))
+lymph_spread <- buildTestCompareGlms(metadata = metadata, covariate = "n_stage", counts = counts, ntrials = ntrials)
 ```
 
-```{r extract-coefs}
-tsrna_coefs <- c(extractCoefs(sample_type$glms[[1]], ntrials), extractCoefs(stage_coarse$glms[[1]], ntrials))
-tsrna_coefs <- table(names(tsrna_coefs))
-tsrna_coefs <- tsrna_coefs[tsrna_coefs > 1]
-length(tsrna_coefs[tsrna_coefs > 1])
+```{r lymph-plot, fig.width=15, fig.height=8}
+lymph_spread$plot
+```
 
-mirna_coefs <- c(extractCoefs(sample_type$glms[[1]], ntrials), extractCoefs(stage_coarse$glms[[1]], ntrials))
-mirna_coefs <- table(names(mirna_coefs))
-tsrna_coefs[mirna_coefs > 1]
-length(tsrna_coefs[mirna_coefs > 1])
+```{r lmyph-auc-plot, fig.width=8, fig.height=6}
+plotAucs(lymph_spread$glms)
+```
+
+```{r extract-coefs, fig.width=8, fig.height=6}
+tsrna_coefs <- c(extractCoefs(sample_type$glms[[1]], ntrials), extractCoefs(stage_coarse$glms[[1]], ntrials))
+tsrna_coefs <- data.frame(table(names(tsrna_coefs)))
+ggplot(tsrna_coefs) + geom_histogram(aes(x = Freq)) + xlab(paste("No. times tsRNA selected in", ntrials, "GLMs"))
+
+mirna_coefs <- c(extractCoefs(sample_type$glms[[2]], ntrials), extractCoefs(stage_coarse$glms[[2]], ntrials))
+mirna_coefs <- data.frame(table(names(mirna_coefs)))
+ggplot(mirna_coefs) + geom_histogram(aes(x = Freq)) + xlab(paste("No. times miRNA selected in", ntrials, "GLMs"))
 ```
 
 
