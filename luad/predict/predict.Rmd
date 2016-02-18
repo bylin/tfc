@@ -146,11 +146,15 @@ plotAucs(lymph_spread$glms)
 ```{r extract-coefs, fig.width=8, fig.height=6}
 tsrna_coefs <- c(extractCoefs(sample_type$glms[[1]], ntrials), extractCoefs(stage_coarse$glms[[1]], ntrials))
 tsrna_coefs <- data.frame(table(names(tsrna_coefs)))
+tsrna_coefs <- tsrna_coefs[order(tsrna_coefs$Freq, decreasing = TRUE), ]
 ggplot(tsrna_coefs) + geom_histogram(aes(x = Freq)) + xlab(paste("No. times tsRNA selected in", ntrials, "GLMs"))
 
 mirna_coefs <- c(extractCoefs(sample_type$glms[[2]], ntrials), extractCoefs(stage_coarse$glms[[2]], ntrials))
 mirna_coefs <- data.frame(table(names(mirna_coefs)))
+mirna_coefs <- mirna_coefs[order(mirna_coefs$Freq, decreasing = TRUE), ]
 ggplot(mirna_coefs) + geom_histogram(aes(x = Freq)) + xlab(paste("No. times miRNA selected in", ntrials, "GLMs"))
+
+save(tsrna_coefs, mirna_coefs, file = "coefs.RData")
 ```
 
 
