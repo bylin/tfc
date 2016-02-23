@@ -1,0 +1,86 @@
+# survival-features
+_Last modified `r format(Sys.time(), "%I:%M %p on %b %d, %Y")`. This document, R session image, version history, knitr cache, figures, and other associated datasets are located in `/inside/grotto/blin/trna-markers/luad/predict/`._
+
+```{r setup, echo=FALSE, warning=FALSE, results=FALSE, message=FALSE, errors=FALSE, cache=FALSE}
+library(knitr)
+opts_chunk$set(cache = TRUE, cache.path = "/inside/grotto/blin/trna-markers/luad/predict/cache/survival-features/", fig.path = "/inside/grotto/blin/trna-markers/luad/predict/figure/survival-features/", eval = TRUE, echo = TRUE, warning = FALSE, results = FALSE, message = FALSE, autodep = TRUE, dev = "png", dpi = 300)
+```
+
+```{r libraries, cache=FALSE}
+library(glmnet)
+library(plyr)
+library(glmnet)
+library(ROCR)
+library(GenomicRanges)
+library(stringr)
+library(reshape2)
+library(survival)
+set.seed(12)
+source('/inside/home/blin/lib/R/ggsurv.R')
+source('predict.R')
+load('/inside/home/blin/grotto/data/hg19-srnas.RData')
+load('/inside/home/blin/grotto/trna-markers/process-reads/luad-counts.RData')
+load('coefs.RData')
+luad_clinical <- luad_clinical[match(colnames(luad_adjusted_counts), luad_clinical$barcode), ]
+ntrials <- 200
+```
+
+We perform feature selection and build a new model to classify patients into low/high risk groups.
+
+## tsRNAs
+
+### Build model, get coefficients
+
+```{r glmnet-cox-1}
+metadata <- luad_clinical[luad_clinical$sample_type == "TP" & luad_clinical$days_survived > 0 & luad_clinical$days_survived < 3000 & !is.na(luad_clinical$days_survived), ]
+counts <- luad_adjusted_counts[rownames(luad_adjusted_counts) %in% tsrna_coefs[tsrna_coefs$Frequency > 10, ]$Name, colnames(luad_adjusted_counts) %in% metadata$barcode]
+metadata$dummy <- as.factor(1)
+dataset <- setupTrainingTestingSets(metadata, "dummy", counts)
+training_counts <- t(dataset$training_counts)
+training_response <- Surv(dataset$training_metadata$days_survived, dataset$training_metadata$vital_status)
+model <- cv.glmnet(training_counts, training_response, family = "cox")
+plot(model)
+coef(model, s = model$lambda.min)
+plot(model$glmnet.fit, label = TRUE)
+```
+
+### Naive Cox model prediction using summed hazard ratios
+
+```{r glmnet-cox-2}
+testing_counts <- t(dataset$testing_counts)
+testing_response <- as.factor(ifelse(dataset$testing_metadata$days_survived >= 1095, ">3", "<3")) # test 1 year survival rate
+pred <- predict(model, newx = testing_counts, s = model$lambda.min) 
+prob <- prediction(-pred, testing_response) # flip signs because a positive hazard ratio gives a higher risk of death
+perf <- performance(prob, "tpr", "fpr")
+roc <- data.frame(TPR = unlist(perf@y.values), FPR = unlist(perf@x.values))
+auc <- unlist(performance(prob, "auc")@y.values)
+auc <- round(auc, 3)
+ggplot(roc) + geom_line(aes(x = FPR, y = TPR)) + geom_abline(intercept = 0, slope = 1, colour = "gray") + ylab("TPR") + xlab("FPR")
+auc
+```
+
+### Classify into high/low risk groups
+
+```{r glmnet-cox-3}
+metadata <- dataset$testing_metadata
+metadata$risk <- as.factor(ifelse(pred > median(pred), "High-risk", "Low-risk"))
+km <- survfit(Surv(days_survived, vital_status) ~ risk, data = metadata)
+ggsurv(km) + theme_bw() + ggtitle("Kaplan-Meier plot")
+cox <- coxph(Surv(days_survived, vital_status) ~ risk, data = metadata)
+summary(cox)
+```
+
+### Build new logistic regression model using hazard ratios
+
+
+```{r glmnet-cox-4}
+
+
+```
+## miRNAs
+
+## Combined tsRNAs + miRNAs
+
+```{r save-session, cache=FALSE}
+save.session("survival-features.RSession")
+```
