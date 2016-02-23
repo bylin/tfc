@@ -42,7 +42,12 @@ buildTestGlm <- function(dataset, features, covariate, randomize = FALSE) {
   list(roc = roc, coef = coef, auc = auc)
 }
 
-extractCoefs <- function(glms, ntrials) unlist(lapply(1:ntrials, function(trial) glms[[trial]]$coef))
+extractCoefs <- function(glms, ntrials) {
+  df <- ldply(1:ntrials, function(trial) data.frame(name = names(glms[[trial]]$coef), score = 1/length(glms[[trial]]$coef), stringsAsFactors = FALSE))
+  df <- dcast(df, name ~ ., fun.aggregate = sum)
+  colnames(df) <- c("name", "score")
+  df[order(df$score, decreasing = TRUE), ]
+}
 
 parseGlms <- function(glms, class) ldply(1:length(glms), function(i) data.frame(glms[[i]]$roc, Trial = i, AUC = glms[[i]]$auc, Class = class))
 
