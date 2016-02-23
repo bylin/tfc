@@ -13,14 +13,18 @@ library(ROCR)
 library(GenomicRanges)
 library(stringr)
 library(reshape2)
+library(survival)
 set.seed(12)
+source('/inside/home/blin/lib/R/ggsurv.R')
 load('/inside/home/blin/grotto/data/hg19-srnas.RData')
 load('/inside/home/blin/grotto/trna-markers/process-reads/luad-counts.RData')
 luad_clinical <- luad_clinical[match(colnames(luad_adjusted_counts), luad_clinical$barcode), ]
 ntrials <- 200
 ```
 
-## Generic function for classification of samples into discrete classes
+## Predict clinical covariates given counts
+
+### Generic function for classification of samples into discrete classes
 
 ```{r utility-functions}
 source('predict.R') 
@@ -75,7 +79,7 @@ buildTestCompareGlms <- function(metadata, covariate, counts, ntrials) {
 
 ```
 
-## Cancer incidence
+### Cancer incidence
 
 ```{r sample-type}
 metadata <- luad_clinical
@@ -91,10 +95,10 @@ sample_type$plot
 plotAucs(sample_type$glms)
 ```
 
-## Metastasis
+### Metastasis
 
 ```{r metastasis}
-metadata <- luad_clinical[luad_clinical$m_stage %in% c("M0", "M1", "M1a", "M1b"), ]
+metadata <- luad_clinical[luad_clinical$m_stage %in% c("M0", "M1", "M1a", "M1b") & luad_clinical$sample_type == "TP", ]
 counts <- luad_adjusted_counts[, colnames(luad_adjusted_counts) %in% metadata$barcode]
 metadata$metastasis <- as.factor(ifelse(metadata$m_stage == "M0", "No metastasis" , "Metastasis"))
 metastasis <- buildTestCompareGlms(metadata = metadata, covariate = "metastasis", counts = counts, ntrials = ntrials)
@@ -108,11 +112,11 @@ metastasis$plot
 plotAucs(metastasis$glms)
 ```
 
-## Cancer stage
+### Cancer stage
 
 ```{r stage-coarse}
 # stage I, IA vs stage IIIA, IIIB, IV - essentially spreading vs non-spreading
-metadata <- luad_clinical[luad_clinical$stage %in% c("Stage I", "Stage IA", "Stage IIIA", "Stage IIIB", "Stage IV"), ]
+metadata <- luad_clinical[luad_clinical$stage %in% c("Stage I", "Stage IA", "Stage IIIA", "Stage IIIB", "Stage IV") & luad_clinical$sample_type == "TP", ]
 counts <- luad_adjusted_counts[, colnames(luad_adjusted_counts) %in% metadata$barcode]
 metadata$stage <- as.factor(ifelse(metadata$stage %in% c("Stage I", "Stage IA"), "Early stage" , "Late stage"))
 stage_coarse <- buildTestCompareGlms(metadata = metadata, covariate = "stage", counts = counts, ntrials = ntrials)
@@ -126,10 +130,10 @@ stage_coarse$plot
 plotAucs(stage_coarse$glms)
 ```
 
-## Lymph node spread
+### Lymph node spread
 
 ```{r lymph}
-metadata <- luad_clinical[luad_clinical$n_stage %in% c("N0", "N1", "N2", "N3"), ]
+metadata <- luad_clinical[luad_clinical$n_stage %in% c("N0", "N1", "N2", "N3") & luad_clinical$sample_type == "TP", ]
 counts <- luad_adjusted_counts[, colnames(luad_adjusted_counts) %in% metadata$barcode]
 metadata$n_stage <- as.factor(ifelse(metadata$n_stage %in% c("N0"), "N0" , "N1+"))
 lymph_spread <- buildTestCompareGlms(metadata = metadata, covariate = "n_stage", counts = counts, ntrials = ntrials)
@@ -145,19 +149,70 @@ plotAucs(lymph_spread$glms)
 
 ```{r extract-coefs, fig.width=8, fig.height=6}
 tsrna_coefs <- c(extractCoefs(sample_type$glms[[1]], ntrials), extractCoefs(stage_coarse$glms[[1]], ntrials))
-tsrna_coefs <- data.frame(table(names(tsrna_coefs)))
-tsrna_coefs <- tsrna_coefs[order(tsrna_coefs$Freq, decreasing = TRUE), ]
-ggplot(tsrna_coefs) + geom_histogram(aes(x = Freq)) + xlab(paste("No. times tsRNA selected in", ntrials, "GLMs"))
+tsrna_coefs <- data.frame(table(names(tsrna_coefs)), stringsAsFactors = FALSE)
+colnames(tsrna_coefs) <- c("Name", "Frequency")
+tsrna_coefs <- tsrna_coefs[order(tsrna_coefs$Frequency, decreasing = TRUE), ]
+ggplot(tsrna_coefs) + geom_histogram(aes(x = Frequency)) + xlab(paste("No. times tsRNA selected in", ntrials, "GLMs"))
 
 mirna_coefs <- c(extractCoefs(sample_type$glms[[2]], ntrials), extractCoefs(stage_coarse$glms[[2]], ntrials))
-mirna_coefs <- data.frame(table(names(mirna_coefs)))
-mirna_coefs <- mirna_coefs[order(mirna_coefs$Freq, decreasing = TRUE), ]
-ggplot(mirna_coefs) + geom_histogram(aes(x = Freq)) + xlab(paste("No. times miRNA selected in", ntrials, "GLMs"))
+mirna_coefs <- data.frame(table(names(mirna_coefs)), stringsAsFactors = FALSE)
+colnames(mirna_coefs) <- c("Name", "Frequency")
+mirna_coefs <- mirna_coefs[order(mirna_coefs$Frequency, decreasing = TRUE), ]
+ggplot(mirna_coefs) + geom_histogram(aes(x = Frequency)) + xlab(paste("No. times miRNA selected in", ntrials, "GLMs"))
 
 save(tsrna_coefs, mirna_coefs, file = "coefs.RData")
 ```
 
+## Feature selection and predicting survival time
 
+### Build model, get coefficients
+
+```{r glmnet-cox-1}
+metadata <- luad_clinical[luad_clinical$sample_type == "TP" & luad_clinical$days_survived > 0 & luad_clinical$days_survived < 3000 & !is.na(luad_clinical$days_survived), ]
+counts <- luad_adjusted_counts[rownames(luad_adjusted_counts) %in% tsrna_coefs[tsrna_coefs$Frequency > 10, ]$Name, colnames(luad_adjusted_counts) %in% metadata$barcode]
+metadata$dummy <- as.factor(1)
+dataset <- setupTrainingTestingSets(metadata, "dummy", counts)
+training_counts <- t(dataset$training_counts)
+training_response <- Surv(dataset$training_metadata$days_survived, dataset$training_metadata$vital_status)
+model <- cv.glmnet(training_counts, training_response, family = "cox")
+plot(model)
+coef(model, s = model$lambda.min)
+plot(model$glmnet.fit, label = TRUE)
+```
+
+### Naive Cox model prediction using summed hazard ratios
+
+```{r glmnet-cox-2}
+testing_counts <- t(dataset$testing_counts)
+testing_response <- as.factor(ifelse(dataset$testing_metadata$days_survived >= 1095, ">3", "<3")) # test 1 year survival rate
+pred <- predict(model, newx = testing_counts, s = model$lambda.min) 
+prob <- prediction(-pred, testing_response) # flip signs because a positive hazard ratio gives a higher risk of death
+perf <- performance(prob, "tpr", "fpr")
+roc <- data.frame(TPR = unlist(perf@y.values), FPR = unlist(perf@x.values))
+auc <- unlist(performance(prob, "auc")@y.values)
+auc <- round(auc, 3)
+ggplot(roc) + geom_line(aes(x = FPR, y = TPR)) + geom_abline(intercept = 0, slope = 1, colour = "gray") + ylab("TPR") + xlab("FPR")
+auc
+```
+
+### Classify into high/low risk groups
+
+```{r glmnet-cox-3}
+metadata <- dataset$testing_metadata
+metadata$risk <- as.factor(ifelse(pred > median(pred), "High-risk", "Low-risk"))
+km <- survfit(Surv(days_survived, vital_status) ~ risk, data = metadata)
+ggsurv(km) + theme_bw() + ggtitle("Kaplan-Meier plot")
+cox <- coxph(Surv(days_survived, vital_status) ~ risk, data = metadata)
+summary(cox)
+```
+
+### Build new logistic regression model using hazard ratios
+
+
+```{r glmnet-cox-4}
+
+
+```
 
 ```{r save-session, cache=FALSE}
 save.session("predict.RSession")
