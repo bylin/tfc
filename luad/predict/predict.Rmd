@@ -132,7 +132,7 @@ plotAucs(stage_coarse$glms)
 
 ### Lymph node spread
 
-```{r lymph}
+```{r lymph, eval=FALSE}
 metadata <- luad_clinical[luad_clinical$n_stage %in% c("N0", "N1", "N2", "N3") & luad_clinical$sample_type == "TP", ]
 counts <- luad_adjusted_counts[, colnames(luad_adjusted_counts) %in% metadata$barcode]
 metadata$n_stage <- as.factor(ifelse(metadata$n_stage %in% c("N0"), "N0" , "N1+"))
@@ -148,17 +148,11 @@ plotAucs(lymph_spread$glms)
 ```
 
 ```{r extract-coefs, fig.width=8, fig.height=6}
-tsrna_coefs <- c(extractCoefs(sample_type$glms[[1]], ntrials), extractCoefs(stage_coarse$glms[[1]], ntrials))
-tsrna_coefs <- data.frame(table(names(tsrna_coefs)), stringsAsFactors = FALSE)
-colnames(tsrna_coefs) <- c("Name", "Frequency")
-tsrna_coefs <- tsrna_coefs[order(tsrna_coefs$Frequency, decreasing = TRUE), ]
-ggplot(tsrna_coefs) + geom_histogram(aes(x = Frequency)) + xlab(paste("No. times tsRNA selected in", ntrials, "GLMs"))
+tsrna_coefs <- extractCoefs(stage_coarse$glms[[1]], ntrials)
+ggplot(tsrna_coefs) + geom_histogram(aes(x = score)) + xlab(paste('No. times tsRNA was included in a model, divided by the number of tsRNAs in the model'))
 
-mirna_coefs <- c(extractCoefs(sample_type$glms[[2]], ntrials), extractCoefs(stage_coarse$glms[[2]], ntrials))
-mirna_coefs <- data.frame(table(names(mirna_coefs)), stringsAsFactors = FALSE)
-colnames(mirna_coefs) <- c("Name", "Frequency")
-mirna_coefs <- mirna_coefs[order(mirna_coefs$Frequency, decreasing = TRUE), ]
-ggplot(mirna_coefs) + geom_histogram(aes(x = Frequency)) + xlab(paste("No. times miRNA selected in", ntrials, "GLMs"))
+mirna_coefs <- extractCoefs(stage_coarse$glms[[2]], ntrials)
+ggplot(mirna_coefs) + geom_histogram(aes(x = score)) + xlab(paste('No. times tsRNA was included in a model, divided by the number of miRNAs in the model'))
 
 save(tsrna_coefs, mirna_coefs, file = "coefs.RData")
 ```
