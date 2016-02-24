@@ -38,7 +38,7 @@ metadata$dummy <- as.factor(1)
 dataset <- setupTrainingTestingSets(metadata, "dummy", counts)
 training_counts <- t(dataset$training_counts)
 training_response <- Surv(dataset$training_metadata$days_survived, dataset$training_metadata$vital_status)
-model <- cv.glmnet(training_counts, training_response, family = "cox")
+model <- cv.glmnet(training_counts, training_response, alpha = 1, nlambda = 250, family = "cox")
 plot(model)
 coef(model, s = model$lambda.min)
 plot(model$glmnet.fit, label = TRUE)
@@ -48,7 +48,7 @@ plot(model$glmnet.fit, label = TRUE)
 
 ```{r tsrna-2}
 # evaluate on early tumors - that's what's clinically relevant ;)
-testing_metadata <- dataset$testing_metadata[dataset$testing_metadata$stage %in% c("Stage I", "Stage IA", "Stage II", "Stage IIA", "Stage IIB"), ]
+testing_metadata <- dataset$testing_metadata
 testing_counts <- t(dataset$testing_counts[, colnames(dataset$testing_counts) %in% testing_metadata$barcode])
 testing_response <- as.factor(ifelse(testing_metadata$days_survived >= 1095, ">3", "<3")) # test 3 year survival rate
 pred <- predict(model, newx = testing_counts, s = model$lambda.min) 
@@ -85,12 +85,12 @@ summary(cox)
 
 ```{r mirna-1}
 metadata <- luad_clinical[luad_clinical$sample_type == "TP" & luad_clinical$days_survived > 0 & luad_clinical$days_survived < 3000 & !is.na(luad_clinical$days_survived), ]
-counts <- luad_adjusted_counts[rownames(luad_adjusted_counts) %in% mirna_coefs[mirna_coefs$score > 0.5, ]$name, colnames(luad_adjusted_counts) %in% metadata$barcode]
+counts <- luad_adjusted_counts[rownames(luad_adjusted_counts) %in% mirna_coefs[mirna_coefs$score > 1, ]$name, colnames(luad_adjusted_counts) %in% metadata$barcode]
 metadata$dummy <- as.factor(1)
 dataset <- setupTrainingTestingSets(metadata, "dummy", counts)
 training_counts <- t(dataset$training_counts)
 training_response <- Surv(dataset$training_metadata$days_survived, dataset$training_metadata$vital_status)
-model <- cv.glmnet(training_counts, training_response, family = "cox")
+model <- cv.glmnet(training_counts, training_response, alpha = 1, nlambda = 250, family = "cox")
 plot(model)
 coef(model, s = model$lambda.min)
 plot(model$glmnet.fit, label = TRUE)
@@ -99,7 +99,7 @@ plot(model$glmnet.fit, label = TRUE)
 ### Naive Cox model prediction using summed hazard ratios
 
 ```{r mirna-2}
-testing_metadata <- dataset$testing_metadata[dataset$testing_metadata$stage %in% c("Stage I", "Stage IA", "Stage II", "Stage IIA", "Stage IIB"), ]
+testing_metadata <- dataset$testing_metadata
 testing_counts <- t(dataset$testing_counts[, colnames(dataset$testing_counts) %in% testing_metadata$barcode])
 testing_response <- as.factor(ifelse(testing_metadata$days_survived >= 1095, ">3", "<3")) # test 3 year survival rate
 pred <- predict(model, newx = testing_counts, s = model$lambda.min) 
@@ -128,12 +128,12 @@ summary(cox)
 
 ```{r combined-1}
 metadata <- luad_clinical[luad_clinical$sample_type == "TP" & luad_clinical$days_survived > 0 & luad_clinical$days_survived < 3000 & !is.na(luad_clinical$days_survived), ]
-counts <- luad_adjusted_counts[rownames(luad_adjusted_counts) %in% c(mirna_coefs[mirna_coefs$score > 0.5, ]$name, tsrna_coefs[tsrna_coefs$score > 0.5, ]$name), colnames(luad_adjusted_counts) %in% metadata$barcode]
+counts <- luad_adjusted_counts[rownames(luad_adjusted_counts) %in% c(mirna_coefs[mirna_coefs$score > 1, ]$name, tsrna_coefs[tsrna_coefs$score > 0.5, ]$name), colnames(luad_adjusted_counts) %in% metadata$barcode]
 metadata$dummy <- as.factor(1)
 dataset <- setupTrainingTestingSets(metadata, "dummy", counts)
 training_counts <- t(dataset$training_counts)
 training_response <- Surv(dataset$training_metadata$days_survived, dataset$training_metadata$vital_status)
-model <- cv.glmnet(training_counts, training_response, family = "cox")
+model <- cv.glmnet(training_counts, training_response, alpha = 1, nlambda = 250, family = "cox")
 plot(model)
 coef(model, s = model$lambda.min)
 plot(model$glmnet.fit, label = TRUE)
@@ -142,7 +142,7 @@ plot(model$glmnet.fit, label = TRUE)
 ### Naive Cox model prediction using summed hazard ratios
 
 ```{r combined-2}
-testing_metadata <- dataset$testing_metadata[dataset$testing_metadata$stage %in% c("Stage I", "Stage IA", "Stage II", "Stage IIA", "Stage IIB"), ]
+testing_metadata <- dataset$testing_metadata
 testing_counts <- t(dataset$testing_counts[, colnames(dataset$testing_counts) %in% testing_metadata$barcode])
 testing_response <- as.factor(ifelse(testing_metadata$days_survived >= 1095, ">3", "<3")) # test 3 year survival rate
 pred <- predict(model, newx = testing_counts, s = model$lambda.min) 
