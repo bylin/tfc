@@ -132,7 +132,7 @@ plotAucs(stage_coarse$glms)
 
 ### Lymph node spread
 
-```{r lymph, eval=FALSE}
+```{r lymph}
 metadata <- luad_clinical[luad_clinical$n_stage %in% c("N0", "N1", "N2", "N3") & luad_clinical$sample_type == "TP", ]
 counts <- luad_adjusted_counts[, colnames(luad_adjusted_counts) %in% metadata$barcode]
 metadata$n_stage <- as.factor(ifelse(metadata$n_stage %in% c("N0"), "N0" , "N1+"))
