@@ -1,0 +1,14 @@
+# process-groupb
+_Last modified `r format(Sys.time(), "%I:%M %p on %b %d, %Y")`. This document, R session image, version history, knitr cache, figures, and other associated datasets are located in `/inside/grotto/blin/trna-markers/`._
+
+```{r setup, echo=FALSE, warning=FALSE, results=FALSE, message=FALSE, errors=FALSE, cache=FALSE}
+library(knitr)
+opts_chunk$set(cache = TRUE, cache.path = "/inside/grotto/blin/trna-markers/cache/process-groupb/", fig.path = "/inside/grotto/blin/trna-markers/figure/process-groupb/", eval = TRUE, echo = TRUE, warning = FALSE, results = FALSE, message = FALSE, autodep = TRUE, dev = "png", dpi = 300)
+```
+
+```{r libraries, cache=FALSE}
+```
+
+```{r save-session, cache=FALSE}
+save.session("process-groupb.RSession")
+```
