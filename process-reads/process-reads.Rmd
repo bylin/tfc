@@ -192,50 +192,52 @@ So here's each sRNA, by source and destination.
 - piRNAs: hg19/DASHR
 - snoRNAs: hg19/DASHR
 
-
-### Raw counts
-
 ```{r count-features-function}
-countFeaturesFromBam <- function(metadata, features, dir = ".") {
+countFeaturesFromBam <- function(metadata, srnas, dir = ".") {
+  metadata <- metadata[which(file.exists(paste0(dir, "/", metadata$shortnames, "-mapped.bam"))), ]
+  metadata <- metadata[which(file.exists(paste0(dir, "/", metadata$shortnames, "-mature.bam"))), ]
+
   # use a for loop because r will run out of memory
   counts <- mclapply(1:nrow(metadata), function(i) {
     row <- metadata[i, ]
     system(paste("echo Counting sRNAs from", row$shortnames))
-    bamfiles <- paste0(dir, "/", row$shortnames, c("-mapped.bam", "-mature.bam"))
-    sample <- readGAlignments(bamfiles)
+    # hg19 counts
+    features <- srnas[!(srnas$class %in% c("3half", "5half"))]
+    bamfile <- paste0(dir, "/", row$shortnames, "-mapped.bam")
+    sample <- readGAlignments(bamfile)
     sample <- convertChrNames(sample, "Ensembl")
     sample_counts <- data.frame(countOverlaps(features, sample, minoverlap = 15))
-    colnames(sample_counts) <- row$barcode
+
+    # mature tRNA counts
+    features <- srnas[srnas$class %in% c("3half", "5half")]
+    bamfile <- paste0(dir, "/", row$shortnames, "-mapped.bam")
+    sample <- readGAlignments(bamfile)
+    sample <- convertChrNames(sample, "Ensembl")
+    sample_counts2 <- data.frame(countOverlaps(features, sample, minoverlap = 15))
+
+    sample_counts <- rbind(sample_counts, sample_counts2)
     sample_counts
   }, mc.cores = 20)
   names <- unlist(lapply(counts, colnames))
   counts <- as.data.frame(matrix(unlist(counts), ncol = nrow(metadata)))
-  rownames(counts) <- features$tx_name
+  rownames(counts) <- c(srnas[!(srnas$class %in% c("3half", "5half"))]$tx_name, srnas[srnas$class %in% c("3half", "5half")])
   colnames(counts) <- names
   counts
 }
-countFeatures <- function(metadata, features, dir = ".") {
-  metadata <- metadata[which(file.exists(paste0(dir, "/", metadata$shortnames, "-mapped.bam"))), ]
-  metadata <- metadata[which(file.exists(paste0(dir, "/", metadata$shortnames, "-mature.bam"))), ]
-  hg19_counts <- countFeaturesFromBam(metadata, srnas[srnas$class %in% c("3half", "5half")], dir)
-  metadata <- metadata[which(file.exists(paste0(dir, "/", metadata$shortnames, "-mapped.bam"))), ])
-  mature_counts <- 
-}
 ```
 
-```{r count-features-luad, eval = FALSE}
-features <- srnas[!duplicated(srnas$tx_name)]
-luad_raw_counts <- countFeaturesFromBam(luad_metadata, features, '/inside/grotto/blin/trna-markers/datasets/luad/') 
+```{r count-features-luad}
+luad_raw_counts <- countFeaturesFromBam(luad_metadata, srnas, '/inside/grotto/blin/trna-markers/datasets/luad/') 
 save(file = 'luad-counts.RData', luad_raw_counts)
 ```
 
-```{r count-features-brca, eval = FALSE}
-brca_raw_counts <- countFeaturesFromBam(brca_metadata, features, '/inside/grotto/blin/trna-markers/datasets/brca/')
+```{r count-features-brca}
+brca_raw_counts <- countFeaturesFromBam(brca_metadata, srnas, '/inside/grotto/blin/trna-markers/datasets/brca/')
 save(file = 'brca-counts.RData', brca_raw_counts)
 ```
 
-```{r count-features-prad, eval = FALSE}
-prad_raw_counts <- countFeaturesFromBam(prad_metadata, features, '/inside/grotto/blin/trna-markers/datasets/prad/')
+```{r count-features-prad}
+prad_raw_counts <- countFeaturesFromBam(prad_metadata, srnas, '/inside/grotto/blin/trna-markers/datasets/prad/')
 save(file = 'prad-counts.RData', prad_raw_counts)
 ```
 
@@ -366,7 +368,7 @@ plotPCA <- function(normalized_counts, adjusted_counts, metadata) {
   df$batch <- metadata[match(c(rownames(pca_before$x), rownames(pca_after$x)), metadata$barcode), ]$batch
   ggplot(df) + geom_point(aes(x = PC1, y = PC2, color = batch, shape = batch, size = sample_type), alpha = 0.3) + scale_shape_manual(values = c(1:22, 34:60)[1:nlevels(df$batch)]) + scale_size_manual(values = c(2, 5)) + guides(color = guide_legend(ncol = 2), shape = guide_legend(ncol = 2), size = guide_legend(ncol = 2)) + facet_wrap(~ adjusted)
 }
-```
+``` 
 
 ```{r luad-pca, fig.show="hold", fig.width=12, fig.height=5}
 plotPCA(luad_normalized_counts, luad_adjusted_counts, luad_clinical) + ggtitle("PCA for batch effect adjusted LUAD data")
