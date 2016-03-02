@@ -204,7 +204,7 @@ countFeaturesFromBam <- function(metadata, features, dir = ".") {
     bamfiles <- paste0(dir, "/", row$shortnames, c("-mapped.bam", "-mature.bam"))
     sample <- readGAlignments(bamfiles)
     sample <- convertChrNames(sample, "Ensembl")
-    sample_counts <- data.frame(countOverlaps(features, sample, minoverlap = 5))
+    sample_counts <- data.frame(countOverlaps(features, sample, minoverlap = 15))
     colnames(sample_counts) <- row$barcode
     sample_counts
   }, mc.cores = 20)
