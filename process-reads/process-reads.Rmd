@@ -20,7 +20,12 @@ source('/inside/grotto/blin/programs/convertChrNames.R')
 load('/inside/grotto/blin/data/hg19-srnas.RData')
 ```
 
-We are expanding our analysis to lung adenocarcinoma (LUAD) and breast invasive carcinoma (BRCA), two of the most common cancers.
+This script downloads and remaps reads. 
+
+- v1: Prostate adenocarcinoma (PRAD)
+- v2: Lung adenocarcinoma (LUAD) and breast invasive carcinoma (BRCA)
+- v3: Hepatocellular carcinoma (LIHC), colorectal (COAD and READ), pancreatic (PAAD), testicular germ cell (TGCT), acute myeloid leukemia (AML and LAML), lower grade glioma (LGG), glioblastoma (GBM), osteosarcoma (OS).
+
 
 ## Download raw reads and metadata
 
@@ -64,10 +69,18 @@ parseMetadata <- function(metadata_file, cancer_code) {
 luad_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/luad-summary.tab', 'luad')
 brca_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/brca-summary.tab', 'brca')
 prad_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/prad-summary.tab', 'prad')
+lihc_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/lihc-summary.tab', 'lihc')
+coad_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/coad-summary.tab', 'coad')
+paad_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/paad-summary.tab', 'paad')
+tgct_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/tgct-summary.tab', 'tgct')
+aml_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/aml-summary.tab', 'aml')
+lgg_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/lgg-summary.tab', 'lgg')
+gbm_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/gbm-summary.tab', 'gbm')
+os_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/os-summary.tab', 'os')
 ```
 
-```{r download-files, eval=FALSE}
-metadatas <- list(luad = luad_metadata, brca = brca_metadata, prad = prad_metadata)
+```{r download-files}
+metadatas <- list(luad = luad_metadata, brca = brca_metadata, prad = prad_metadata, tgct = tgct_metadata, aml = aml_metadata, lgg = lgg_metadata, gbm = gbm_metadata, os = os_metadata)
 currentwd <- getwd()
 setwd('/inside/grotto/blin/trna-markers/datasets/raw')
 for (cancer_code in names(metadatas)) { 
@@ -83,11 +96,16 @@ setwd(currentwd)
 
 We are missing `01810b1a-84e4-43d5-8a1e-42b132a1126f`, which is `brca-0939-TP.bam`. It's been removed for now.
 
+## Remap reads
 
-## Remap reads to hg19
+To count both tRFs processed from mature and immature tRNAs, we need to map to both hg19 and mature tRNAs.
+
+### hg19
+
+Key change: --end-to-end prevents clipping. 
 
 ```{r remap, engine='bash'}
-remap() {
+remapHg19() {
   currentwd=`pwd`
   cd $1
   for prefix in `ls *-TP.bam *-NT.bam | cut -f 1 -d .`; do
@@ -99,7 +117,7 @@ remap() {
         mv ${prefix}_M $prefix.fastq
         rm ${prefix}_1 ${prefix}_2
       fi
-      bowtie2 -x ~/grotto/data/hg19 -k 100 -U ${prefix}.fastq -S $prefix-mapped-1.sam
+      bowtie2 -x ~/grotto/data/hg19 -k 100 --end-to-end -U ${prefix}.fastq -S $prefix-mapped-1.sam
       samtools view -S -F 4 -h -u $prefix-mapped-1.sam | samtools view -F 512 -h  - > $prefix-mapped-2.sam
       bowtie2-best-mapped.py $prefix-mapped-2.sam | samtools view -S -u - | samtools sort - $prefix-mapped # auto appends .bam
     fi
@@ -109,31 +127,82 @@ remap() {
   done
   cd $currentwd
 }
+remapHg19 /inside/grotto/blin/trna-markers/datasets/luad
+remapHg19 /inside/grotto/blin/trna-markers/datasets/brca
+remapHg19 /inside/grotto/blin/trna-markers/datasets/prad
+remapHg19 /inside/grotto/blin/trna-markers/datasets/lihc
+remapHg19 /inside/grotto/blin/trna-markers/datasets/coad
+remapHg19 /inside/grotto/blin/trna-markers/datasets/paad
+remapHg19 /inside/grotto/blin/trna-markers/datasets/tgct
+remapHg19 /inside/grotto/blin/trna-markers/datasets/aml
+remapHg19 /inside/grotto/blin/trna-markers/datasets/lgg
+remapHg19 /inside/grotto/blin/trna-markers/datasets/gbm
+remapHg19 /inside/grotto/blin/trna-markers/datasets/os
+```
+
+## Remap reads to mature tRNAs
+
+```{r remap-tRNAs, engine='bash'}
+remap() {
+  currentwd=`pwd`
+  cd $1
+  for prefix in `ls *-TP.bam *-NT.bam | cut -f 1 -d .`; do
+    if [ ! -e $prefix-mature.bam ]
+    then
+      if [ ! -e $prefix.fastq ]
+      then
+        bam2fastq --force -o $prefix# `readlink $prefix.bam`
+        mv ${prefix}_M $prefix.fastq
+        rm ${prefix}_1 ${prefix}_2
+      fi
+      bowtie2 -x ~/grotto/data/hg19-tRNAs -k 100 --end-to-end -U ${prefix}.fastq -S $prefix-mature-1.sam
+      samtools view -S -F 4 -h -u $prefix-mature-1.sam | samtools view -F 512 -h  - > $prefix-mature-2.sam
+      bowtie2-best-mature.py $prefix-mature-2.sam | samtools view -S -u - | samtools sort - $prefix-mature # auto appends .bam
+    fi
+    rm -f $prefix.fastq
+    rm -f $prefix-mature-1.sam
+    rm -f $prefix-mature-2.sam
+  done
+  cd $currentwd
+}
 remap /inside/grotto/blin/trna-markers/datasets/luad
 remap /inside/grotto/blin/trna-markers/datasets/brca
 remap /inside/grotto/blin/trna-markers/datasets/prad
+remap /inside/grotto/blin/trna-markers/datasets/lihc
+remap /inside/grotto/blin/trna-markers/datasets/coad
+remap /inside/grotto/blin/trna-markers/datasets/paad
+remap /inside/grotto/blin/trna-markers/datasets/tgct
+remap /inside/grotto/blin/trna-markers/datasets/aml
+remap /inside/grotto/blin/trna-markers/datasets/lgg
+remap /inside/grotto/blin/trna-markers/datasets/gbm
+remap /inside/grotto/blin/trna-markers/datasets/os
 ```
 
 ## Count reads
 
-The sRNAs are derived from:
+There's a few types of sRNAs. We can get most of them from the hg19 mappings, but for tRF-1, tRF-3, and mature tRNA halves, we need the mappings to mature tRNAs.
 
-- DASHR, which consists of miRbase v19 for miRNAs, tRNAdb for tRNAs (will do something about that later), and the genome browser/GENCODE for rRNA, snRNA, snoRNA, and scRNA, and NCBI for piRNA. They also put in 50 bp flanking sequences for each tRNA (also have to fix this for gtRNAdb later). It'll do... for now.
-- tRFdb
-- Andrew's tRNA halves
-- tRF3ac and tRF5ac: first match tRFs to possible tRNA halves, then "subtract" the tRF from the half to generate the fragment that would be generated by combined DICER/angiogenin cleavage.
+So here's each sRNA, by source and destination.
+
+- tRF-1: hg19/Trailers from Andrew's tRNA half db
+- immature tRNA 5' half: hg19/Trailers from Andrew's tRNA half db
+- mature tRNA 3' half/tRF3: tRNAs/split from anticodon
+- mature tRNA 5' half/tRF5: tRNAs/split from anticodon
+- miRNAs: hg19/miRbase
+- piRNAs: hg19/DASHR
+- snoRNAs: hg19/DASHR
+
 
 ### Raw counts
 
 ```{r count-features-function}
 countFeaturesFromBam <- function(metadata, features, dir = ".") {
-  metadata <- metadata[which(file.exists(paste0(dir, "/", metadata$shortnames, "-mapped.bam"))), ]
   # use a for loop because r will run out of memory
   counts <- mclapply(1:nrow(metadata), function(i) {
     row <- metadata[i, ]
     system(paste("echo Counting sRNAs from", row$shortnames))
-    bamfile <- paste0(dir, "/", row$shortnames, "-mapped.bam")
-    sample <- readGAlignments(bamfile)
+    bamfiles <- paste0(dir, "/", row$shortnames, c("-mapped.bam", "-mature.bam"))
+    sample <- readGAlignments(bamfiles)
     sample <- convertChrNames(sample, "Ensembl")
     sample_counts <- data.frame(countOverlaps(features, sample, minoverlap = 5))
     colnames(sample_counts) <- row$barcode
@@ -144,6 +213,13 @@ countFeaturesFromBam <- function(metadata, features, dir = ".") {
   rownames(counts) <- features$tx_name
   colnames(counts) <- names
   counts
+}
+countFeatures <- function(metadata, features, dir = ".") {
+  metadata <- metadata[which(file.exists(paste0(dir, "/", metadata$shortnames, "-mapped.bam"))), ]
+  metadata <- metadata[which(file.exists(paste0(dir, "/", metadata$shortnames, "-mature.bam"))), ]
+  hg19_counts <- countFeaturesFromBam(metadata, srnas[srnas$class %in% c("3half", "5half")], dir)
+  metadata <- metadata[which(file.exists(paste0(dir, "/", metadata$shortnames, "-mapped.bam"))), ])
+  mature_counts <- 
 }
 ```
 
