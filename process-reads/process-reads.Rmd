@@ -24,7 +24,8 @@ This script downloads and remaps reads.
 
 - v1: Prostate adenocarcinoma (PRAD)
 - v2: Lung adenocarcinoma (LUAD) and breast invasive carcinoma (BRCA)
-- v3: Hepatocellular carcinoma (LIHC), colorectal (COAD and READ), pancreatic (PAAD), testicular germ cell (TGCT), acute myeloid leukemia (AML and LAML), lower grade glioma (LGG), glioblastoma (GBM), osteosarcoma (OS).
+- v3: Hepatocellular carcinoma (LIHC), colorectal (COAD and READ), pancreatic (PAAD), testicular germ cell (TGCT), lower grade glioma (LGG)
+  - acute myeloid leukemia (AML and LAML), glioblastoma (GBM), osteosarcoma (OS) do not have enough samples for miRNA-Seq data.
 
 
 ## Download raw reads and metadata
@@ -38,17 +39,23 @@ parseMetadata <- function(metadata_file, cancer_code) {
   # convert character "uploaded" column to date object for easier comparison
   metadata$uploaded <- strptime(gsub("/", "-", metadata$uploaded), "%Y-%m-%d")
   # start by getting matched pairs
-  # all NT datasets have at least one TP dataset from the same patient (participant). We can filter out datasets by existence of the NT file, then grab the most recent TP and NT datasets for each patient.
-  paired <- subset(metadata, participant_id %in% subset(metadata, sample_type == "NT")$participant_id & participant_id %in% subset(metadata, sample_type == "TP")$participant_id)
-  paired$paired <- TRUE # remember which samples are matched tumor/normal
+  # first, check if there actually are normal tissue samples
   parsed_metadata <- data.frame()
-  for (current_id in unique(paired$participant_id)) {
-    nt <- subset(paired, participant_id == current_id & sample_type == "NT")
-    tp <- subset(paired, participant_id == current_id & sample_type == "TP")
-    parsed_metadata <- rbind(parsed_metadata, tp[which(tp$uploaded == max(tp$uploaded)), ], nt[which(nt$uploaded == max(nt$uploaded)), ])
+  if (any(metadata$sample_type == "NT")) {
+  # all NT datasets have at least one TP dataset from the same patient (participant). We can filter out datasets by existence of the NT file, then grab the most recent TP and NT datasets for each patient.
+    paired <- subset(metadata, participant_id %in% subset(metadata, sample_type == "NT")$participant_id & participant_id %in% subset(metadata, sample_type == "TP")$participant_id)
+    paired$paired <- TRUE # remember which samples are matched tumor/normal
+    for (current_id in unique(paired$participant_id)) {
+      nt <- subset(paired, participant_id == current_id & sample_type == "NT")
+      tp <- subset(paired, participant_id == current_id & sample_type == "TP")
+      parsed_metadata <- rbind(parsed_metadata, tp[which(tp$uploaded == max(tp$uploaded)), ], nt[which(nt$uploaded == max(nt$uploaded)), ])
+    }
+    singles <- metadata[-which(metadata$participant_id %in% parsed_metadata$participant_id), ]
+  }
+  else {
+    singles <- metadata
   }
   # now for the unpaired samples
-  singles <- metadata[-which(metadata$participant_id %in% parsed_metadata$participant_id), ]
   singles$paired <- FALSE
   for (current_id in unique(singles$participant_id)) {
     ps <- subset(singles, participant_id == current_id) # get all samples for this participant
@@ -73,14 +80,11 @@ lihc_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/l
 coad_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/coad-summary.tab', 'coad')
 paad_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/paad-summary.tab', 'paad')
 tgct_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/tgct-summary.tab', 'tgct')
-aml_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/aml-summary.tab', 'aml')
 lgg_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/lgg-summary.tab', 'lgg')
-gbm_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/gbm-summary.tab', 'gbm')
-os_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/os-summary.tab', 'os')
 ```
 
 ```{r download-files}
-metadatas <- list(luad = luad_metadata, brca = brca_metadata, prad = prad_metadata, tgct = tgct_metadata, aml = aml_metadata, lgg = lgg_metadata, gbm = gbm_metadata, os = os_metadata)
+metadatas <- list(luad = luad_metadata, brca = brca_metadata, prad = prad_metadata, lihc = lihc_metadata, coad = coad_metadata, paad = paad_metadata, tgct = tgct_metadata, lgg = lgg_metadata)
 currentwd <- getwd()
 setwd('/inside/grotto/blin/trna-markers/datasets/raw')
 for (cancer_code in names(metadatas)) { 
@@ -134,10 +138,7 @@ remapHg19 /inside/grotto/blin/trna-markers/datasets/lihc
 remapHg19 /inside/grotto/blin/trna-markers/datasets/coad
 remapHg19 /inside/grotto/blin/trna-markers/datasets/paad
 remapHg19 /inside/grotto/blin/trna-markers/datasets/tgct
-remapHg19 /inside/grotto/blin/trna-markers/datasets/aml
 remapHg19 /inside/grotto/blin/trna-markers/datasets/lgg
-remapHg19 /inside/grotto/blin/trna-markers/datasets/gbm
-remapHg19 /inside/grotto/blin/trna-markers/datasets/os
 ```
 
 ## Remap reads to mature tRNAs
@@ -172,10 +173,7 @@ remap /inside/grotto/blin/trna-markers/datasets/lihc
 remap /inside/grotto/blin/trna-markers/datasets/coad
 remap /inside/grotto/blin/trna-markers/datasets/paad
 remap /inside/grotto/blin/trna-markers/datasets/tgct
-remap /inside/grotto/blin/trna-markers/datasets/aml
 remap /inside/grotto/blin/trna-markers/datasets/lgg
-remap /inside/grotto/blin/trna-markers/datasets/gbm
-remap /inside/grotto/blin/trna-markers/datasets/os
 ```
 
 ## Count reads
