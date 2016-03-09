@@ -107,12 +107,11 @@ summary(cox)
 
 ## Cox PH for counts
 
-
 ```{r coxph-tsrna}
 load('/inside/grotto/blin/trna-markers/luad/predict/coefs.RData') 
 metadata <- km_metadata[km_metadata$stage %in% c("Stage I", "Stage IA", "Stage IIIA", "Stage IIIB", "Stage IV"), ]
 metadata$stage <- as.factor(ifelse(metadata$stage %in% c("Stage I", "Stage IA"), "Early stage" , "Late stage"))
-counts <- luad_adjusted_counts[rownames(luad_adjusted_counts) %in% tsrna_coefs$Name[1:50], colnames(luad_adjusted_counts) %in% metadata$barcode]
+counts <- luad_adjusted_counts[rownames(luad_adjusted_counts) %in% tsrna_coefs, colnames(luad_adjusted_counts) %in% metadata$barcode]
 
 # set up training/testing sets
 dataset <- setupTrainingTestingSets(metadata, "stage", counts)
@@ -126,7 +125,7 @@ summary(cox)
 ```
 
 ```{r coxph-mirna}
-counts <- luad_adjusted_counts[rownames(luad_adjusted_counts) %in% mirna_coefs$Name[1], colnames(luad_adjusted_counts) %in% metadata$barcode]
+counts <- luad_adjusted_counts[rownames(luad_adjusted_counts) %in% mirna_coefs, colnames(luad_adjusted_counts) %in% metadata$barcode]
 
 # set up training/testing sets
 dataset <- setupTrainingTestingSets(metadata, "stage", counts)
