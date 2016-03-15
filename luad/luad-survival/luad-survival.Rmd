@@ -3,13 +3,13 @@ _Last modified `r format(Sys.time(), "%I:%M %p on %b %d, %Y")`. This document, R
 
 ```{r setup, echo=FALSE, warning=FALSE, results=FALSE, message=FALSE, errors=FALSE, cache=FALSE}
 library(knitr)
-opts_chunk$set(cache = TRUE, cache.path = "/inside/grotto/blin/trna-markers/luad/luad-survival/cache/", eval = TRUE, echo = TRUE, warning = FALSE, results = FALSE, message = FALSE, autodep = TRUE, dev = "png", dpi = 300)
+opts_chunk$set(cache = TRUE, cache.path = "/inside/grotto/blin/trna-markers/luad/luad-survival/cache/luad-survival/", eval = TRUE, echo = TRUE, warning = FALSE, results = FALSE, message = FALSE, autodep = TRUE, dev = "png", dpi = 300)
 ```
 
 ```{r libraries, cache=FALSE}
 library(survival)
 library(glmnet)
-library(kable)
+library(qvalue)
 source('/inside/home/blin/lib/R/ggsurv.R')
 source('/inside/grotto/blin/trna-markers/luad/predict/predict.R')
 load('/inside/home/blin/grotto/data/hg19-srnas.RData')
@@ -29,9 +29,7 @@ load('/inside/grotto/blin/trna-markers/luad/cluster-subtypes/clusters.RData')
 clusters = clusters[clusters$known, ]
 metadata = km_metadata[substr(km_metadata$barcode, 1, 12) %in% clusters$barcode, ]
 metadata$subtype = as.factor(clusters$subtype[match(substr(metadata$barcode, 1, 12), clusters$barcode)])
-ggsurv(survfit(Surv(days_survived, vital_status) ~ subtype, data = metadata)) + theme_bw() + ggtitle("Kaplan-Meier plot grouped by subtype")
-cox = coxph(Surv(days_survived, vital_status) ~ subtype, data = metadata)
-summary(cox)
+coxph(Surv(days_survived, vital_status) ~ subtype, data = metadata)
 ```
 
 ### Tumor stage
@@ -41,41 +39,121 @@ metadata = km_metadata[km_metadata$stage != "[Not Available]", ]
 levels(metadata$stage) = list(I = c("Stage I", "Stage IA", "Stage IB"), II = c("Stage II", "Stage IIA", "Stage IIB"), III = c("Stage III", "Stage IIIA", "Stage IIIB"), IV = "Stage IV")
 km = survfit(Surv(days_survived, vital_status) ~ stage, data = metadata)
 ggsurv(km) + theme_bw() + ggtitle("Kaplan-Meier plot grouped by stage")
-cox = coxph(Surv(days_survived, vital_status) ~ stage, data = metadata)
-summary(cox)
+coxph(Surv(days_survived, vital_status) ~ stage, data = metadata)
+```
+
+### Lymph node involvement
+
+```{r univariate-lymph}
+metadata = km_metadata[km_metadata$n_stage %in% c("N0", "N1", "N2", "N3"), ]
+metadata$n_stage = droplevels(metadata$n_stage)
+km = survfit(Surv(days_survived, vital_status) ~ n_stage, data = metadata)
+ggsurv(km) + theme_bw() + ggtitle("Kaplan-Meier plot grouped by lymph node spread")
+coxph(Surv(days_survived, vital_status) ~ n_stage, data = metadata)
 ```
 
 ### Smoker vs non-smoker
 
 ```{r univariate-smoking}
 km = survfit(Surv(days_survived, vital_status) ~ smoker, data = km_metadata)
-ggsurv(km) + theme_bw() + ggtitle("Kaplan-Meier plot grouped by smoking history")
-cox = coxph(Surv(days_survived, vital_status) ~ smoker, data = metadata)
-summary(cox)
+coxph(Surv(days_survived, vital_status) ~ smoker, data = metadata)
 ```
 
 ### Gender
 
 ```{r univariate-gender}
 km = survfit(Surv(days_survived, vital_status) ~ gender, data = km_metadata)
-ggsurv(km) + theme_bw() + ggtitle("Kaplan-Meier plot grouped by gender")
-cox = coxph(Surv(days_survived, vital_status) ~ gender, data = metadata)
-summary(cox)
+coxph(Surv(days_survived, vital_status) ~ gender, data = metadata)
+```
+
+### Race
+```{r univariate-race}
+metadata = km_metadata[km_metadata$race %in% c("BLACK OR AFRICAN AMERICAN", "WHITE", "ASIAN"), ]
+metadata$race = droplevels(metadata$race)
+km = survfit(Surv(days_survived, vital_status) ~ race, data = metadata)
+coxph(Surv(days_survived, vital_status) ~ race, data = metadata)
 ```
 
 ### Age
 
 ```{r univariate-age}
 metadata = km_metadata
-metadata$age = ifelse(metadata$age <= 65, "<= 65", "> 65")
+metadata$age = ifelse(as.integer(as.character(metadata$age)) <= 65, "<= 65", "> 65")
 km = survfit(Surv(days_survived, vital_status) ~ age, data = metadata)
-ggsurv(km) + theme_bw() + ggtitle("Kaplan-Meier plot grouped by age group")
-cox = coxph(Surv(days_survived, vital_status) ~ age, data = metadata)
-summary(cox)
+coxph(Surv(days_survived, vital_status) ~ age, data = metadata)
 ```
 
+## Univariate survival analyses for features
+
+```{r univariate-features}
+metadata = luad_clinical[luad_clinical$sample_type == "TP" & luad_clinical$days_survived > 0 & luad_clinical$days_survived < 3000 & !is.na(luad_clinical$days_survived), ]
+counts = luad_adjusted_counts[rownames(luad_adjusted_counts) %in% c(unique(srnas[srnas$class %in% c("fivehalf", "threehalf", "trailer")]$tx_name), unique(srnas[str_detect(srnas$class, "mi")]$tx_name)), colnames(luad_adjusted_counts) %in% metadata$barcode]
+metadata$dummy = as.factor(1)
+dataset = setupTrainingTestingSets(metadata, "dummy", counts)
+features = rownames(counts)
+hazard_ratios = data.frame(t(sapply(features, function(feature) {
+  training_counts = t(dataset$training_counts)[, feature]
+  training_metadata = cbind(dataset$training_metadata, feature = training_counts)
+  cox = summary(coxph(Surv(days_survived, vital_status) ~ feature, data = training_metadata))
+  hazard = cox$conf.int[1]
+  conf_int = cox$conf.int[3:4]
+  pval = coef(cox)[5]
+  c(hazard, conf_int, pval)
+  })))
+colnames(hazard_ratios) = c('hazard', 'lower', 'upper', 'pvalue')
+```
+
+We have `r sum(hazard_ratios$pvalue <= 0.05)` features that are significant (p < 0.05), with `r sum(hazard_ratios$pvalue[1:2726] <= 0.05)` miRNAs and `r sum(hazard_ratios$pvalue[2727:4760] <= 0.05)` tRNA fragments. 
 
 
-```{r save-image, cache=FALSE}
+### Identify signatures
+
+```{r univariate-features-2}
+mirna_signature = hazard_ratios[order(hazard_ratios$pvalue[1:2726]), ]
+mirna_signature = mirna_signature[!duplicated(mirna_signature), ][1:10, ]
+kable(mirna_signature)
+tsrna_signature = hazard_ratios[2727:4760, ][order(hazard_ratios$pvalue[2727:4760]), ]
+tsrna_signature = tsrna_signature[!duplicated(tsrna_signature), ][1:10, ]
+kable(tsrna_signature)
+srna_signature = hazard_ratios[order(hazard_ratios$pvalue), ]
+srna_signature = srna_signature[!duplicated(srna_signature), ][1:10, ]
+kable(srna_signature)
+```
+
+## Train signatures
+
+```{r train-signatures}
+training_counts <- t(dataset$training_counts[rownames(training_counts) %in% tsrna_signature, ])
+training_response <- Surv(dataset$training_metadata$days_survived, dataset$training_metadata$vital_status)
+model <- cv.glmnet(training_counts, training_response, alpha = 1, nlambda = 250, family = "cox")
+plot(model)
+coef(model, s = model$lambda.min)
+plot(model$glmnet.fit, label = TRUE)
+```
+
+```{r train-signatures-2}
+# evaluate on early tumors - that's what's clinically relevant ;)
+testing_metadata <- dataset$testing_metadata
+testing_counts <- t(dataset$testing_counts[rownames(dataset$training_counts) %in% tsrna_signature, colnames(dataset$testing_counts) %in% testing_metadata$barcode])
+testing_response <- as.factor(ifelse(testing_metadata$days_survived >= 1095, ">3", "<3")) # test 3 year survival rate
+pred <- predict(model, newx = testing_counts, s = model$lambda.min) 
+prob <- prediction(-pred, testing_response) # flip signs because a positive hazard ratio gives a higher risk of death
+perf <- performance(prob, "tpr", "fpr")
+roc <- data.frame(TPR = unlist(perf@y.values), FPR = unlist(perf@x.values))
+auc <- unlist(performance(prob, "auc")@y.values)
+auc <- round(auc, 3)
+ggplot(roc) + geom_line(aes(x = FPR, y = TPR)) + geom_abline(intercept = 0, slope = 1, colour = "gray") + ylab("TPR") + xlab("FPR")
+auc
+```
+
+```{r train-signatures-3}
+
+```
+
+## Multivariate survival analyses
+
+
+
+```{r save-session, echo=FALSE, cache=FALSE}
 save.session("luad-survival.RSession")
 ```
