@@ -1,4 +1,4 @@
-## luad-survival
+# luad-survival
 _Last modified `r format(Sys.time(), "%I:%M %p on %b %d, %Y")`. This document, R session image, knitr cache, figures, and other associated datasets are located in `cruncher:/inside/grotto/blin/trna-markers/luad/luad-survival/`._
 
 ```{r setup, echo=FALSE, warning=FALSE, results=FALSE, message=FALSE, errors=FALSE, cache=FALSE}
@@ -9,134 +9,71 @@ opts_chunk$set(cache = TRUE, cache.path = "/inside/grotto/blin/trna-markers/luad
 ```{r libraries, cache=FALSE}
 library(survival)
 library(glmnet)
+library(kable)
 source('/inside/home/blin/lib/R/ggsurv.R')
 source('/inside/grotto/blin/trna-markers/luad/predict/predict.R')
 load('/inside/home/blin/grotto/data/hg19-srnas.RData')
 load('/inside/home/blin/grotto/trna-markers/process-reads/luad-counts.RData')
-luad_clinical <- luad_clinical[match(colnames(luad_adjusted_counts), luad_clinical$barcode), ]
+luad_clinical = luad_clinical[match(colnames(luad_adjusted_counts), luad_clinical$barcode), ]
 ```
 
-### Overall survival
+## Univariate survival analysis for clinical covariates
 
-```{r km-plot}
-km_metadata <- na.omit(luad_clinical[luad_clinical$sample_type != "NT" & luad_clinical$days_survived > 30 & luad_clinical$days_survived < 3000, ]) # get rid of NAs, remove normal samples (e.g. duplicates), and put the time period as 1 month - 8 years
-km <- survfit(Surv(days_survived, vital_status) ~ 1, data = km_metadata)
-ggsurv(km) + theme_bw() + ggtitle("Kaplan-Meier plot")
-```
+First, we'll independently test each covariate and feature to see what is implicated in survival.
 
 ### Subtype
 
-```{r km-subtype}
+```{r univariate-subtype}
+km_metadata = na.omit(luad_clinical[luad_clinical$sample_type != "NT" & luad_clinical$days_survived > 30 & luad_clinical$days_survived < 3000, ]) # get rid of NAs, remove normal samples (e.g. duplicates), and put the time period as 1 month - 8 years
 load('/inside/grotto/blin/trna-markers/luad/cluster-subtypes/clusters.RData')
-clusters <- clusters[clusters$known, ]
-metadata <- km_metadata[substr(km_metadata$barcode, 1, 12) %in% clusters$barcode, ]
-metadata$subtype <- as.factor(clusters$subtype[match(substr(metadata$barcode, 1, 12), clusters$barcode)])
+clusters = clusters[clusters$known, ]
+metadata = km_metadata[substr(km_metadata$barcode, 1, 12) %in% clusters$barcode, ]
+metadata$subtype = as.factor(clusters$subtype[match(substr(metadata$barcode, 1, 12), clusters$barcode)])
 ggsurv(survfit(Surv(days_survived, vital_status) ~ subtype, data = metadata)) + theme_bw() + ggtitle("Kaplan-Meier plot grouped by subtype")
-table(metadata$subtype)
-cox <- coxph(Surv(days_survived, vital_status) ~ subtype, data = metadata)
+cox = coxph(Surv(days_survived, vital_status) ~ subtype, data = metadata)
 summary(cox)
 ```
 
 ### Tumor stage
 
-```{r km-stage}
-metadata <- km_metadata[km_metadata$stage %in% c("Stage I", "Stage IA", "Stage IIIA", "Stage IIIB", "Stage IV"), ]
-metadata$stage <- as.factor(ifelse(metadata$stage %in% c("Stage I", "Stage IA"), "Early stage" , "Late stage"))
-km <- survfit(Surv(days_survived, vital_status) ~ stage, data = metadata)
+```{r univariate-stage}
+metadata = km_metadata[km_metadata$stage != "[Not Available]", ]
+levels(metadata$stage) = list(I = c("Stage I", "Stage IA", "Stage IB"), II = c("Stage II", "Stage IIA", "Stage IIB"), III = c("Stage III", "Stage IIIA", "Stage IIIB"), IV = "Stage IV")
+km = survfit(Surv(days_survived, vital_status) ~ stage, data = metadata)
 ggsurv(km) + theme_bw() + ggtitle("Kaplan-Meier plot grouped by stage")
-table(metadata$stage)
-cox <- coxph(Surv(days_survived, vital_status) ~ stage, data = metadata)
+cox = coxph(Surv(days_survived, vital_status) ~ stage, data = metadata)
 summary(cox)
-```
-
-```{r cox-glmnet-stage}
-metadata$time <- metadata$days_survived
-metadata$status <- metadata$vital_status
-
-# set up features
-counts <- luad_adjusted_counts[, colnames(luad_adjusted_counts) %in% metadata$barcode]
-tsrnas <- unique(srnas[srnas$class %in% c("fivehalf", "threehalf", "trailer")]$tx_name)
-mirnas <- unique(srnas[str_detect(srnas$class, "mi")]$tx_name)
-snornas <- unique(srnas[srnas$class == "snoRNA"]$tx_name)
-
-# set up training/testing sets
-dataset <- setupTrainingTestingSets(metadata, "stage", counts)
-training_counts <- t(dataset$training_counts[rownames(dataset$training_counts) %in% mirnas, ])
-training_response <- dataset$training_metadata[match(colnames(dataset$training_counts), dataset$training_metadata$barcode), ][, c("days_survived", "vital_status")]
-colnames(training_response) <- 
-
-testing_counts <- t(dataset$testing_counts[rownames(dataset$testing_counts) %in% mirnas, ])
-testing_response <- dataset$testing_metadata[match(colnames(dataset$testing_counts), dataset$testing_metadata$barcode), ][, c("days_survived", "vital_status")]
-
-# build/test model
-
-# model <- glmnet(
 ```
 
 ### Smoker vs non-smoker
 
-```{r km-smoking}
-km <- survfit(Surv(days_survived, vital_status) ~ smoker, data = km_metadata)
+```{r univariate-smoking}
+km = survfit(Surv(days_survived, vital_status) ~ smoker, data = km_metadata)
 ggsurv(km) + theme_bw() + ggtitle("Kaplan-Meier plot grouped by smoking history")
-table(metadata$smoker)
-cox <- coxph(Surv(days_survived, vital_status) ~ smoker, data = metadata)
+cox = coxph(Surv(days_survived, vital_status) ~ smoker, data = metadata)
 summary(cox)
 ```
 
 ### Gender
 
-```{r km-gender}
-km <- survfit(Surv(days_survived, vital_status) ~ gender, data = km_metadata)
+```{r univariate-gender}
+km = survfit(Surv(days_survived, vital_status) ~ gender, data = km_metadata)
 ggsurv(km) + theme_bw() + ggtitle("Kaplan-Meier plot grouped by gender")
-table(km_metadata$gender)
-cox <- coxph(Surv(days_survived, vital_status) ~ gender, data = metadata)
+cox = coxph(Surv(days_survived, vital_status) ~ gender, data = metadata)
 summary(cox)
 ```
 
 ### Age
 
-```{r km-age}
-metadata <- km_metadata
-metadata$age <- cut(as.integer(as.character(metadata$age)), breaks = c(0, 50, 65, 80, 100), labels = c("<50", "50-65", "65-80", "80+"))
-km <- survfit(Surv(days_survived, vital_status) ~ age, data = metadata)
+```{r univariate-age}
+metadata = km_metadata
+metadata$age = ifelse(metadata$age <= 65, "<= 65", "> 65")
+km = survfit(Surv(days_survived, vital_status) ~ age, data = metadata)
 ggsurv(km) + theme_bw() + ggtitle("Kaplan-Meier plot grouped by age group")
-table(metadata$age)
-cox <- coxph(Surv(days_survived, vital_status) ~ age, data = metadata)
+cox = coxph(Surv(days_survived, vital_status) ~ age, data = metadata)
 summary(cox)
 ```
 
-## Cox PH for counts
-
-```{r coxph-tsrna}
-load('/inside/grotto/blin/trna-markers/luad/predict/coefs.RData') 
-metadata <- km_metadata[km_metadata$stage %in% c("Stage I", "Stage IA", "Stage IIIA", "Stage IIIB", "Stage IV"), ]
-metadata$stage <- as.factor(ifelse(metadata$stage %in% c("Stage I", "Stage IA"), "Early stage" , "Late stage"))
-counts <- luad_adjusted_counts[rownames(luad_adjusted_counts) %in% tsrna_coefs, colnames(luad_adjusted_counts) %in% metadata$barcode]
-
-# set up training/testing sets
-dataset <- setupTrainingTestingSets(metadata, "stage", counts)
-training <- cbind(t(dataset$training_counts[rownames(dataset$training_counts), ]),
-                  dataset$training_metadata[match(colnames(dataset$training_counts), dataset$training_metadata$barcode), ][, c("days_survived", "vital_status")])
-testing <- cbind(t(dataset$testing_counts[rownames(dataset$testing_counts), ]),
-                 dataset$testing_metadata[match(colnames(dataset$testing_counts), dataset$testing_metadata$barcode), ][, c("days_survived", "vital_status")])
-
-cox <- coxph(Surv(days_survived, vital_status) ~ ., data = training, model = TRUE)
-summary(cox)
-```
-
-```{r coxph-mirna}
-counts <- luad_adjusted_counts[rownames(luad_adjusted_counts) %in% mirna_coefs, colnames(luad_adjusted_counts) %in% metadata$barcode]
-
-# set up training/testing sets
-dataset <- setupTrainingTestingSets(metadata, "stage", counts)
-training <- cbind(t(dataset$training_counts[rownames(dataset$training_counts), ]),
-                  dataset$training_metadata[match(colnames(dataset$training_counts), dataset$training_metadata$barcode), ][, c("days_survived", "vital_status")])
-testing <- cbind(t(dataset$testing_counts[rownames(dataset$testing_counts), ]),
-                 dataset$testing_metadata[match(colnames(dataset$testing_counts), dataset$testing_metadata$barcode), ][, c("days_survived", "vital_status")])
-
-cox <- coxph(Surv(days_survived, vital_status) ~ ., data = training, model = TRUE)
-summary(cox)
-```
 
 
 ```{r save-image, cache=FALSE}
