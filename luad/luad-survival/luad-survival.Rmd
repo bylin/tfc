@@ -9,7 +9,9 @@ opts_chunk$set(cache = TRUE, cache.path = "/inside/grotto/blin/trna-markers/luad
 ```{r libraries, cache=FALSE}
 library(survival)
 library(glmnet)
-library(qvalue)
+library(GenomicRanges)
+library("RColorBrewer")
+library(pheatmap)
 source('/inside/home/blin/lib/R/ggsurv.R')
 source('/inside/grotto/blin/trna-markers/luad/predict/predict.R')
 load('/inside/home/blin/grotto/data/hg19-srnas.RData')
@@ -24,7 +26,7 @@ First, we'll independently test each covariate and feature to see what is implic
 ### Subtype
 
 ```{r univariate-subtype}
-km_metadata = na.omit(luad_clinical[luad_clinical$sample_type != "NT" & luad_clinical$days_survived > 30 & luad_clinical$days_survived < 3000, ]) # get rid of NAs, remove normal samples (e.g. duplicates), and put the time period as 1 month - 8 years
+km_metadata = na.omit(luad_clinical[luad_clinical$sample_type != "NT" & !is.na(luad_clinical$days_survived), ]) # get rid of NAs, remove normal samples (e.g. duplicates), and put the time period as 1 month - 8 years
 load('/inside/grotto/blin/trna-markers/luad/cluster-subtypes/clusters.RData')
 clusters = clusters[clusters$known, ]
 metadata = km_metadata[substr(km_metadata$barcode, 1, 12) %in% clusters$barcode, ]
@@ -52,18 +54,26 @@ ggsurv(km) + theme_bw() + ggtitle("Kaplan-Meier plot grouped by lymph node sprea
 coxph(Surv(days_survived, vital_status) ~ n_stage, data = metadata)
 ```
 
+### Metastasis
+
+```{r univariate-metastasis}
+metadata = km_metadata[km_metadata$m_stage %in% c("M0", "M1", "M1a", "M1b"), ]
+levels(metadata$m_stage) = list(M0 = "M0", M1 = c("M1", "M1a", "M1b"))
+km = survfit(Surv(days_survived, vital_status) ~ m_stage, data = metadata)
+ggsurv(km) + theme_bw() + ggtitle("Kaplan-Meier plot grouped by metastasis")
+summary(coxph(Surv(days_survived, vital_status) ~ m_stage, data = metadata))
+```
+
 ### Smoker vs non-smoker
 
 ```{r univariate-smoking}
-km = survfit(Surv(days_survived, vital_status) ~ smoker, data = km_metadata)
-coxph(Surv(days_survived, vital_status) ~ smoker, data = metadata)
+coxph(Surv(days_survived, vital_status) ~ smoker, data = km_metadata)
 ```
 
 ### Gender
 
 ```{r univariate-gender}
-km = survfit(Surv(days_survived, vital_status) ~ gender, data = km_metadata)
-coxph(Surv(days_survived, vital_status) ~ gender, data = metadata)
+coxph(Surv(days_survived, vital_status) ~ gender, data = km_metadata)
 ```
 
 ### Race
@@ -83,10 +93,12 @@ km = survfit(Surv(days_survived, vital_status) ~ age, data = metadata)
 coxph(Surv(days_survived, vital_status) ~ age, data = metadata)
 ```
 
+Out of all of these, only lymph node involvement and cancer stage are significant predictors of survival.
+
 ## Univariate survival analyses for features
 
 ```{r univariate-features}
-metadata = luad_clinical[luad_clinical$sample_type == "TP" & luad_clinical$days_survived > 0 & luad_clinical$days_survived < 3000 & !is.na(luad_clinical$days_survived), ]
+metadata = luad_clinical[luad_clinical$sample_type == "TP" & !is.na(luad_clinical$days_survived) & luad_clinical$days_survived > 0, ]
 counts = luad_adjusted_counts[rownames(luad_adjusted_counts) %in% c(unique(srnas[srnas$class %in% c("fivehalf", "threehalf", "trailer")]$tx_name), unique(srnas[str_detect(srnas$class, "mi")]$tx_name)), colnames(luad_adjusted_counts) %in% metadata$barcode]
 metadata$dummy = as.factor(1)
 dataset = setupTrainingTestingSets(metadata, "dummy", counts)
@@ -106,54 +118,162 @@ colnames(hazard_ratios) = c('hazard', 'lower', 'upper', 'pvalue')
 We have `r sum(hazard_ratios$pvalue <= 0.05)` features that are significant (p < 0.05), with `r sum(hazard_ratios$pvalue[1:2726] <= 0.05)` miRNAs and `r sum(hazard_ratios$pvalue[2727:4760] <= 0.05)` tRNA fragments. 
 
 
-### Identify signatures
+## Identify signatures
+
+We need to reduce the number of duplicates. This includes double naming for different loci (hsa-mir-6946 and hsa-miR-6946), extra features (3p/5p), and repeats, especially the haplotypes. Hopefully this won't be needed once you revamp the feature list.
+
+```{r clean-features}
+hazard_ratios = hazard_ratios[str_detect(rownames(hazard_ratios), "hsa-miR|hsa-let|tRNA-\\w+-\\w+-\\d+-1|trailer") & !str_detect(rownames(hazard_ratios), "apd|cox|mcf|apd|mann|qbl|dbb|ssto"), ]
+```
+
 
 ```{r univariate-features-2}
-mirna_signature = hazard_ratios[order(hazard_ratios$pvalue[1:2726]), ]
-mirna_signature = mirna_signature[!duplicated(mirna_signature), ][1:10, ]
+mirna_signature = hazard_ratios[order(hazard_ratios$pvalue[1:1505]), ][1:20, ]
 kable(mirna_signature)
-tsrna_signature = hazard_ratios[2727:4760, ][order(hazard_ratios$pvalue[2727:4760]), ]
-tsrna_signature = tsrna_signature[!duplicated(tsrna_signature), ][1:10, ]
+tsrna_signature = hazard_ratios[1505:2616, ][order(hazard_ratios$pvalue[1505:2616]), ][1:20, ]
 kable(tsrna_signature)
-srna_signature = hazard_ratios[order(hazard_ratios$pvalue), ]
-srna_signature = srna_signature[!duplicated(srna_signature), ][1:10, ]
+srna_signature = hazard_ratios[order(hazard_ratios$pvalue), ][1:20, ]
 kable(srna_signature)
+```
+
+### Expression heatmap
+
+```{r srna-heatmap, fig.width=10, fig.height=5}
+df = as.matrix(counts[rownames(counts) %in% rownames(hazard_ratios[rownames(hazard_ratios) %in% rownames(tsrna_signature), ]), ])
+# load subtype data
+load('/inside/grotto/blin/trna-markers/luad/cluster-subtypes/clusters.RData')
+clusters$subtype[!clusters$known] = "Unknown"
+metadata$subtype = as.factor(clusters$subtype[match(substr(metadata$barcode, 1, 12), clusters$barcode)])
+levels(metadata$stage) = list(I = c("Stage I", "Stage IA", "Stage IB"), II = c("Stage II", "Stage IIA", "Stage IIB"), III = c("Stage III", "Stage IIIA", "Stage IIIB"), IV = "Stage IV", Unknown = '[Not Available]')
+levels(metadata$n_stage) = list(N0 = "N0", N1 = "N1", N2 = "N2", N3 = "N3", Unknown = c("NX", "[Not Available]"))
+annot = data.frame(stage = metadata$stage, subtype = metadata$subtype, n_stage = metadata$n_stage)
+rownames(annot) = colnames(counts)
+annot_colors = list(stage = setNames(c(brewer.pal(4, "Set1"), "grey"), levels(metadata$stage)), subtype = setNames(c(brewer.pal(3, "Set2"), "grey"), levels(metadata$subtype)), n_stage = setNames(c(brewer.pal(4, "Set3"), "grey"), levels(metadata$n_stage)))
+pheatmap(df, annotation_col = annot, annotation_colors = annot_colors, fontsize = 8, scale = 'row', show_colnames = FALSE, color = brewer.pal(11, "RdBu"))
 ```
 
 ## Train signatures
 
-```{r train-signatures}
-training_counts <- t(dataset$training_counts[rownames(training_counts) %in% tsrna_signature, ])
-training_response <- Surv(dataset$training_metadata$days_survived, dataset$training_metadata$vital_status)
-model <- cv.glmnet(training_counts, training_response, alpha = 1, nlambda = 250, family = "cox")
-plot(model)
-coef(model, s = model$lambda.min)
-plot(model$glmnet.fit, label = TRUE)
+```{r train-signatures-function}
+trainTestSignatures = function(dataset, features) {
+  # build model
+  training_counts = t(dataset$training_counts[rownames(dataset$training_counts) %in% features, ])
+  training_response = Surv(dataset$training_metadata$days_survived, dataset$training_metadata$vital_status)
+  model = cv.glmnet(training_counts, training_response, alpha = 1, nlambda = 250, family = "cox")
+  plot(model) # plot lambdas
+  plot(model$glmnet.fit, label = TRUE) # plot coefficient shrinkage
+
+  # test model - predict 3 year survival rate on testing data
+  testing_metadata = dataset$testing_metadata
+  testing_counts = t(dataset$testing_counts[rownames(dataset$training_counts) %in% features, colnames(dataset$testing_counts) %in% testing_metadata$barcode])
+  testing_response = as.factor(ifelse(testing_metadata$days_survived >= 1095, ">3", "<3")) # test 3 year survival rate
+  pred = predict(model, newx = testing_counts, s = model$lambda.min)
+  prob = prediction(-pred, testing_response) # flip signs because we trained with survival data, and a positive coefficient gives a higher risk of death
+  perf = performance(prob, "tpr", "fpr")
+  roc = data.frame(TPR = unlist(perf@y.values), FPR = unlist(perf@x.values))
+  auc = unlist(performance(prob, "auc")@y.values)
+  auc = round(auc, 3)
+
+  # classify into high/low risk sets
+  testing_metadata$risk = as.factor(ifelse(pred > median(pred), "High-risk", "Low-risk"))
+  km = survfit(Surv(days_survived, vital_status) ~ risk, data = testing_metadata)
+  km = ggsurv(km) + theme_bw() + ggtitle("Kaplan-Meier plot for risk based on signature")
+  cox = coxph(Surv(days_survived, vital_status) ~ risk, data = testing_metadata)
+
+  list(model = model, coef = coef(model, s = model$lambda.min), score = pred[, ], roc = roc, auc = auc, cox = summary(cox), km = km)
+}
+
 ```
 
-```{r train-signatures-2}
-# evaluate on early tumors - that's what's clinically relevant ;)
-testing_metadata <- dataset$testing_metadata
-testing_counts <- t(dataset$testing_counts[rownames(dataset$training_counts) %in% tsrna_signature, colnames(dataset$testing_counts) %in% testing_metadata$barcode])
-testing_response <- as.factor(ifelse(testing_metadata$days_survived >= 1095, ">3", "<3")) # test 3 year survival rate
-pred <- predict(model, newx = testing_counts, s = model$lambda.min) 
-prob <- prediction(-pred, testing_response) # flip signs because a positive hazard ratio gives a higher risk of death
-perf <- performance(prob, "tpr", "fpr")
-roc <- data.frame(TPR = unlist(perf@y.values), FPR = unlist(perf@x.values))
-auc <- unlist(performance(prob, "auc")@y.values)
-auc <- round(auc, 3)
-ggplot(roc) + geom_line(aes(x = FPR, y = TPR)) + geom_abline(intercept = 0, slope = 1, colour = "gray") + ylab("TPR") + xlab("FPR")
-auc
+### tsRNA signature performance
+
+```{r train-signatures-tsrna}
+tsrna = trainTestSignatures(dataset, rownames(tsrna_signature))
+tsrna$coef
+coef(tsrna$cox)
+tsrna$km
 ```
 
-```{r train-signatures-3}
+### microRNA signature performance
 
+```{r train-signatures-mirna}
+mirna = trainTestSignatures(dataset, rownames(mirna_signature))
+mirna$coef
+coef(mirna$cox)
+mirna$km
+```
+
+### Combined signature performance
+
+```{r train-signatures-srna}
+srna = trainTestSignatures(dataset, rownames(srna_signature))
+srna$coef
+coef(srna$cox)
+srna$km
+```
+
+### Predicting 3-year survival
+
+```{r predict-survival}
+roc = rbind(cbind(tsrna$roc, Class = "tsRNA"), cbind(mirna$roc, Class = "miRNA"), cbind(srna$roc, Class = "Combined"))
+ggplot(roc) + geom_line(aes(x = FPR, y = TPR, color = Class)) + geom_abline(intercept = 0, slope = 1, colour = "gray") + ylab("TPR") + xlab("FPR") + theme_bw()
+c(tsRNA = tsrna$auc, miRNA = mirna$auc, sRNA = srna$auc)
 ```
 
 ## Multivariate survival analyses
 
+Let's test whether this sRNA signature has prognostic value independent of stage and lymph node involvement. First, the univariate estimate:
+
+```{r multivariate-cox-1}
+metadata = dataset$testing_metadata
+metadata$score = srna$score
+cox = coxph(Surv(days_survived, vital_status) ~ score, data = metadata)
+kable(data.frame(Coef = cox$coef, Hazard = summary(cox)$conf.int[1], Lower = summary(cox)$conf.int[3], Upper = summary(cox)$conf.int[4], Pval = summary(cox)$coef[5]))
+```
+
+Then, let's see if stage is a confounding factor. If it is, then the confidence intervals should shrink (added precision), and the hazard ratio should appreciably change.
+
+```{r multivariate-cox-2}
+metadata = metadata[metadata$stage != "[Not Available]", ]
+levels(metadata$stage) = list(I = c("Stage I", "Stage IA", "Stage IB"), II = c("Stage II", "Stage IIA", "Stage IIB"), III = c("Stage III", "Stage IIIA", "Stage IIIB"), IV = "Stage IV")
+cox = coxph(Surv(days_survived, vital_status) ~ score + stage, data = metadata)
+kable(data.frame(Coef = cox$coef, Hazard = summary(cox)$conf.int[, 1], Lower = summary(cox)$conf.int[, 3], Upper = summary(cox)$conf.int[, 4], Pval = summary(cox)$coef[, 5]))
+```
+
+The confidence interval actually increases when we add cancer stage as a covariate, so it seems independent. But there's some conflicting evidence. The coefficient shrank by a factor of 7%. 
+
+By the way, since stage is a categorical variable, ANOVA can see whether stage is a significant covariate _after_ adjustment for the effect of risk score. It's significant.
+
+```{r multivariate-cox-3}
+anova(cox)
+```
+
+Now, we test if there's an interaction between score and stage. 
+
+```{r multivariate-cox-4}
+cox = coxph(Surv(days_survived, vital_status) ~ score + stage + score:stage, data = metadata)
+kable(data.frame(Coef = cox$coef, Hazard = summary(cox)$conf.int[, 1], Lower = summary(cox)$conf.int[, 3], Upper = summary(cox)$conf.int[, 4], Pval = summary(cox)$coef[, 5]))
+```
+
+The interaction term is not significant, so we can safely say there's no interaction.
+
+Same analysis for lymph node spread.
+
+```{r multivariate-cox-5}
+metadata = dataset$testing_metadata
+metadata$score = tsrna$score
+metadata = metadata[metadata$n_stage %in% c("N0", "N1", "N2", "N3"), ]
+metadata$n_stage = droplevels(metadata$n_stage)
+cox = coxph(Surv(days_survived, vital_status) ~ score + n_stage, data = metadata)
+kable(data.frame(Coef = cox$coef, Hazard = summary(cox)$conf.int[, 1], Lower = summary(cox)$conf.int[, 3], Upper = summary(cox)$conf.int[, 4], Pval = summary(cox)$coef[, 5]))
+anova(cox)
+cox = coxph(Surv(days_survived, vital_status) ~ score + n_stage + score:n_stage, data = metadata)
+kable(data.frame(Coef = cox$coef, Hazard = summary(cox)$conf.int[, 1], Lower = summary(cox)$conf.int[, 3], Upper = summary(cox)$conf.int[, 4], Pval = summary(cox)$coef[, 5]))
+```
+
+Similar considerations as above. Hazard ratio doesn't change much, and confidence intervals widen. As a whole, lymph node spread is significant after adjusting for risk score. Interaction terms fail to reach significance.
 
 
-```{r save-session, echo=FALSE, cache=FALSE}
+```{r save-session, echo=FALSE, results='hide', cache=FALSE}
 save.session("luad-survival.RSession")
 ```
