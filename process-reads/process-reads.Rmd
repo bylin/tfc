@@ -24,7 +24,7 @@ This script downloads and remaps reads.
 
 - v1: Prostate adenocarcinoma (PRAD)
 - v2: Lung adenocarcinoma (LUAD) and breast invasive carcinoma (BRCA)
-- v3: Hepatocellular carcinoma (LIHC), colorectal (COAD and READ), pancreatic (PAAD), testicular germ cell (TGCT), lower grade glioma (LGG)
+- v3: Hepatocellular carcinoma (LIHC), Lymphoid neoplasm diffuse large b-cell lymphoma (DLBC), colorectal (COAD and READ), pancreatic (PAAD), testicular germ cell (TGCT), lower grade glioma (LGG)
   - acute myeloid leukemia (AML and LAML), glioblastoma (GBM), osteosarcoma (OS) do not have enough samples for miRNA-Seq data.
 
 
@@ -76,6 +76,7 @@ parseMetadata <- function(metadata_file, cancer_code) {
 luad_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/luad-summary.tab', 'luad')
 brca_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/brca-summary.tab', 'brca')
 prad_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/prad-summary.tab', 'prad')
+dlbc_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/dlbc-summary.tab', 'dlbc')
 lihc_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/lihc-summary.tab', 'lihc')
 coad_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/coad-summary.tab', 'coad')
 paad_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/paad-summary.tab', 'paad')
@@ -84,13 +85,14 @@ lgg_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/lg
 ```
 
 ```{r download-files}
-metadatas <- list(luad = luad_metadata, brca = brca_metadata, prad = prad_metadata, lihc = lihc_metadata, coad = coad_metadata, paad = paad_metadata, tgct = tgct_metadata, lgg = lgg_metadata)
+metadatas <- list(luad = luad_metadata, brca = brca_metadata, prad = prad_metadata, dlbc = dlbc_metadata, lihc = lihc_metadata, coad = coad_metadata, paad = paad_metadata, tgct = tgct_metadata, lgg = lgg_metadata)
 currentwd <- getwd()
 setwd('/inside/grotto/blin/trna-markers/datasets/raw')
 for (cancer_code in names(metadatas)) { 
   metadata <- metadatas[[cancer_code]]
   for (analysis_id in metadata$analysis_id) {
   	if (file.exists(analysis_id)) next # if exists, assume file was downloaded correctly and is not corrupted
+    system(paste0('echo gtdownload -c $CGKEY -d ', analysis_id, cancer_code))
     system(paste0('gtdownload -c $CGKEY -d ', analysis_id))
   }
   file.symlink(paste0(getwd(), '/', metadata$analysis_id, '/', metadata$barcode, '_mirna.bam'), paste0('/inside/grotto/blin/trna-markers/datasets/', cancer_code, '/', metadata$shortnames, '.bam'))
@@ -106,10 +108,14 @@ To count both tRFs processed from mature and immature tRNAs, we need to map to b
 
 ### hg19
 
-Key change: --end-to-end prevents clipping. 
+Key changes:
+- --end-to-end prevents clipping
+- Andrew has a few settings that I've incorporated too, with his reasoning:
+  - --very-sensitive: necessary due to mismatch caused by modified base misreads 
+  - --np 5 --ignore-quals: quality scores are irrelevant, and N should be scored as only slightly better than a mismatch. ignoring quals forces the mismatches to have a single score, which is necessary for precise N weighting.
 
 ```{r remap, engine='bash'}
-remapHg19() {
+remap() {
   currentwd=`pwd`
   cd $1
   for prefix in `ls *-TP.bam *-NT.bam | cut -f 1 -d .`; do
@@ -121,7 +127,7 @@ remapHg19() {
         mv ${prefix}_M $prefix.fastq
         rm ${prefix}_1 ${prefix}_2
       fi
-      bowtie2 -x ~/grotto/data/hg19 -k 100 --end-to-end -U ${prefix}.fastq -S $prefix-mapped-1.sam
+      bowtie2 -x ~/grotto/data/hg19_plus_mature_tRNAs -k 100 --very-sensitive --ignore-quals --np 5 --end-to-end -p 20 -U ${prefix}.fastq -S $prefix-mapped-1.sam
       samtools view -S -F 4 -h -u $prefix-mapped-1.sam | samtools view -F 512 -h  - > $prefix-mapped-2.sam
       bowtie2-best-mapped.py $prefix-mapped-2.sam | samtools view -S -u - | samtools sort - $prefix-mapped # auto appends .bam
     fi
@@ -131,49 +137,15 @@ remapHg19() {
   done
   cd $currentwd
 }
-remapHg19 /inside/grotto/blin/trna-markers/datasets/luad
-remapHg19 /inside/grotto/blin/trna-markers/datasets/brca
-remapHg19 /inside/grotto/blin/trna-markers/datasets/prad
-remapHg19 /inside/grotto/blin/trna-markers/datasets/lihc
-remapHg19 /inside/grotto/blin/trna-markers/datasets/coad
-remapHg19 /inside/grotto/blin/trna-markers/datasets/paad
-remapHg19 /inside/grotto/blin/trna-markers/datasets/tgct
-remapHg19 /inside/grotto/blin/trna-markers/datasets/lgg
-```
-
-## Remap reads to mature tRNAs
-
-```{r remap-tRNAs, engine='bash'}
-remap() {
-  currentwd=`pwd`
-  cd $1
-  for prefix in `ls *-TP.bam *-NT.bam | cut -f 1 -d .`; do
-    if [ ! -e $prefix-mature.bam ]
-    then
-      if [ ! -e $prefix.fastq ]
-      then
-        bam2fastq --force -o $prefix# `readlink $prefix.bam`
-        mv ${prefix}_M $prefix.fastq
-        rm ${prefix}_1 ${prefix}_2
-      fi
-      bowtie2 -x ~/grotto/data/hg19-tRNAs -k 100 --end-to-end -U ${prefix}.fastq -S $prefix-mature-1.sam
-      samtools view -S -F 4 -h -u $prefix-mature-1.sam | samtools view -F 512 -h  - > $prefix-mature-2.sam
-      bowtie2-best-mature.py $prefix-mature-2.sam | samtools view -S -u - | samtools sort - $prefix-mature # auto appends .bam
-    fi
-    rm -f $prefix.fastq
-    rm -f $prefix-mature-1.sam
-    rm -f $prefix-mature-2.sam
-  done
-  cd $currentwd
-}
 remap /inside/grotto/blin/trna-markers/datasets/luad
-remap /inside/grotto/blin/trna-markers/datasets/brca
-remap /inside/grotto/blin/trna-markers/datasets/prad
-remap /inside/grotto/blin/trna-markers/datasets/lihc
-remap /inside/grotto/blin/trna-markers/datasets/coad
-remap /inside/grotto/blin/trna-markers/datasets/paad
-remap /inside/grotto/blin/trna-markers/datasets/tgct
-remap /inside/grotto/blin/trna-markers/datasets/lgg
+#remap /inside/grotto/blin/trna-markers/datasets/brca
+#remap /inside/grotto/blin/trna-markers/datasets/prad
+#remap /inside/grotto/blin/trna-markers/datasets/dlbc
+#remap /inside/grotto/blin/trna-markers/datasets/lihc
+#remap /inside/grotto/blin/trna-markers/datasets/coad
+#remap /inside/grotto/blin/trna-markers/datasets/paad
+#remap /inside/grotto/blin/trna-markers/datasets/tgct
+#remap /inside/grotto/blin/trna-markers/datasets/lgg
 ```
 
 ## Count reads
@@ -187,38 +159,25 @@ So here's each sRNA, by source and destination.
 - mature tRNA 3' half/tRF3: tRNAs/split from anticodon
 - mature tRNA 5' half/tRF5: tRNAs/split from anticodon
 - miRNAs: hg19/miRbase
-- piRNAs: hg19/DASHR
 - snoRNAs: hg19/DASHR
 
 ```{r count-features-function}
 countFeaturesFromBam <- function(metadata, srnas, dir = ".") {
   metadata <- metadata[which(file.exists(paste0(dir, "/", metadata$shortnames, "-mapped.bam"))), ]
-  metadata <- metadata[which(file.exists(paste0(dir, "/", metadata$shortnames, "-mature.bam"))), ]
 
   # use a for loop because r will run out of memory
   counts <- mclapply(1:nrow(metadata), function(i) {
     row <- metadata[i, ]
     system(paste("echo Counting sRNAs from", row$shortnames))
-    # hg19 counts
-    features <- srnas[!(srnas$class %in% c("3half", "5half"))]
     bamfile <- paste0(dir, "/", row$shortnames, "-mapped.bam")
     sample <- readGAlignments(bamfile)
     sample <- convertChrNames(sample, "Ensembl")
-    sample_counts <- data.frame(countOverlaps(features, sample, minoverlap = 15))
-
-    # mature tRNA counts
-    features <- srnas[srnas$class %in% c("3half", "5half")]
-    bamfile <- paste0(dir, "/", row$shortnames, "-mapped.bam")
-    sample <- readGAlignments(bamfile)
-    sample <- convertChrNames(sample, "Ensembl")
-    sample_counts2 <- data.frame(countOverlaps(features, sample, minoverlap = 15))
-
-    sample_counts <- rbind(sample_counts, sample_counts2)
+    sample_counts <- data.frame(countOverlaps(features, sample, maxgap = 0, type = "within", minoverlap = 10))
     sample_counts
   }, mc.cores = 20)
   names <- unlist(lapply(counts, colnames))
   counts <- as.data.frame(matrix(unlist(counts), ncol = nrow(metadata)))
-  rownames(counts) <- c(srnas[!(srnas$class %in% c("3half", "5half"))]$tx_name, srnas[srnas$class %in% c("3half", "5half")])
+  rownames(counts) <- srnas$tx_name
   colnames(counts) <- names
   counts
 }
@@ -230,13 +189,13 @@ save(file = 'luad-counts.RData', luad_raw_counts)
 ```
 
 ```{r count-features-brca}
-brca_raw_counts <- countFeaturesFromBam(brca_metadata, srnas, '/inside/grotto/blin/trna-markers/datasets/brca/')
-save(file = 'brca-counts.RData', brca_raw_counts)
+#brca_raw_counts <- countFeaturesFromBam(brca_metadata, srnas, '/inside/grotto/blin/trna-markers/datasets/brca/')
+#save(file = 'brca-counts.RData', brca_raw_counts)
 ```
 
 ```{r count-features-prad}
-prad_raw_counts <- countFeaturesFromBam(prad_metadata, srnas, '/inside/grotto/blin/trna-markers/datasets/prad/')
-save(file = 'prad-counts.RData', prad_raw_counts)
+#prad_raw_counts <- countFeaturesFromBam(prad_metadata, srnas, '/inside/grotto/blin/trna-markers/datasets/prad/')
+#save(file = 'prad-counts.RData', prad_raw_counts)
 ```
 
 ### Normalized counts
@@ -256,8 +215,8 @@ normalizeCounts <- function(counts, metadata) {
 	counts(dds, normalized = TRUE)
 }
 luad_normalized_counts <- normalizeCounts(luad_raw_counts, luad_metadata)
-brca_normalized_counts <- normalizeCounts(brca_raw_counts, brca_metadata)
-prad_normalized_counts <- normalizeCounts(prad_raw_counts, prad_metadata)
+#brca_normalized_counts <- normalizeCounts(brca_raw_counts, brca_metadata)
+#prad_normalized_counts <- normalizeCounts(prad_raw_counts, prad_metadata)
 ```
 
 MA plots are log mean of counts (x axis) vs log fold change (y axis). But we don't need log mean of counts, mean of counts should do nicely.
@@ -282,8 +241,8 @@ plotMA <- function(raw_counts, normalized_counts, metadata, srnas) {
   ggplot(df) + geom_point(aes(x = log2counts, y = log2FC, color = sRNA), size = 1, alpha = 0.3) + geom_hline(yintercept = 0, color = "red") + facet_wrap(~ normalized)
 }
 plotMA(luad_raw_counts, luad_normalized_counts, luad_metadata, srnas) + ggtitle("LUAD MA plot")
-plotMA(brca_raw_counts, brca_normalized_counts, brca_metadata, srnas) + ggtitle("BRCA MA plot")
-plotMA(prad_raw_counts, prad_normalized_counts, prad_metadata, srnas) + ggtitle("PRAD MA plot")
+#plotMA(brca_raw_counts, brca_normalized_counts, brca_metadata, srnas) + ggtitle("BRCA MA plot")
+#plotMA(prad_raw_counts, prad_normalized_counts, prad_metadata, srnas) + ggtitle("PRAD MA plot")
 ```
 
 
@@ -312,33 +271,33 @@ luad_clinical <- with(luad_clinical[match(luad_metadata$participant_id, luad_cli
                                 vital_status = ifelse(vital_status == "Alive", 0, 1),
                                 age = age_at_initial_pathologic_diagnosis,
                                 batch = batch))
-brca_clinical <- processClinicalDataFile('brca-clinical-biotab-04032015.tab', 'brca-clinical-batches-04032015.tab')
-brca_clinical <- with(brca_clinical[match(brca_metadata$participant_id, brca_clinical$bcr_patient_uuid), ], 
-                      data.frame(brca_metadata,
-                                ethnicity = ethnicity,
-                                race = race,
-                                vital_status = ifelse(vital_status == "Alive", 0, 1),
-                                days_survived = as.integer(days_survived),
-                                age = age_at_diagnosis,
-                                t_stage = ajcc_tumor_pathologic_pt, 
-                                m_stage = ajcc_metastasis_pathologic_pm, 
-                                n_stage = ajcc_nodes_pathologic_pn,
-                                stage = ajcc_pathologic_tumor_stage,
-                                er_status = er_status_by_ihc,
-                                pr_status = pr_status_by_ihc,
-                                her2_status = her2_status_by_ihc,
-                                batch = batch))
-prad_clinical <- processClinicalDataFile('prad-clinical-biotab-04012015.tab', 'prad-clinical-batches-04012015.tab')
-prad_clinical <- with(prad_clinical[match(prad_metadata$participant_id, prad_clinical$bcr_patient_uuid), ],
-                      data.frame(prad_metadata,
-                                 days_survived = as.integer(days_survived),
-                                 vital_status = ifelse(vital_status == "Alive", 0, 1),
-                                 t_stage = pathologic_T,
-                                 m_stage = pathologic_M,
-                                 n_stage = pathologic_N,
-                                 gleason_score = as.integer(gleason_score),
-                                 age = abs(round(as.integer(birth_days_to)/365)),
-                                 batch = batch)) # maybe change to age_at _initial_pathologic_diagnosis? 
+# brca_clinical <- processClinicalDataFile('brca-clinical-biotab-04032015.tab', 'brca-clinical-batches-04032015.tab')
+# brca_clinical <- with(brca_clinical[match(brca_metadata$participant_id, brca_clinical$bcr_patient_uuid), ], 
+#                       data.frame(brca_metadata,
+#                                 ethnicity = ethnicity,
+#                                 race = race,
+#                                 vital_status = ifelse(vital_status == "Alive", 0, 1),
+#                                 days_survived = as.integer(days_survived),
+#                                 age = age_at_diagnosis,
+#                                 t_stage = ajcc_tumor_pathologic_pt, 
+#                                 m_stage = ajcc_metastasis_pathologic_pm, 
+#                                 n_stage = ajcc_nodes_pathologic_pn,
+#                                 stage = ajcc_pathologic_tumor_stage,
+#                                 er_status = er_status_by_ihc,
+#                                 pr_status = pr_status_by_ihc,
+#                                 her2_status = her2_status_by_ihc,
+#                                 batch = batch))
+# prad_clinical <- processClinicalDataFile('prad-clinical-biotab-04012015.tab', 'prad-clinical-batches-04012015.tab')
+# prad_clinical <- with(prad_clinical[match(prad_metadata$participant_id, prad_clinical$bcr_patient_uuid), ],
+#                       data.frame(prad_metadata,
+#                                  days_survived = as.integer(days_survived),
+#                                  vital_status = ifelse(vital_status == "Alive", 0, 1),
+#                                  t_stage = pathologic_T,
+#                                  m_stage = pathologic_M,
+#                                  n_stage = pathologic_N,
+#                                  gleason_score = as.integer(gleason_score),
+#                                  age = abs(round(as.integer(birth_days_to)/365)),
+#                                  batch = batch)) # maybe change to age_at _initial_pathologic_diagnosis? 
 ```
 
 ## Check for batch effects
@@ -353,8 +312,8 @@ removeBatchEffects <- function(metadata, counts) {
   ComBat(dat = counts, batch = batch, mod = mod)
 }
 luad_adjusted_counts <- removeBatchEffects(luad_clinical, luad_normalized_counts)
-brca_adjusted_counts <- removeBatchEffects(brca_clinical, brca_normalized_counts)
-prad_adjusted_counts <- removeBatchEffects(prad_clinical, prad_normalized_counts) 
+#brca_adjusted_counts <- removeBatchEffects(brca_clinical, brca_normalized_counts)
+#prad_adjusted_counts <- removeBatchEffects(prad_clinical, prad_normalized_counts) 
 ```
 
 ```{r pca-function}
@@ -373,15 +332,15 @@ plotPCA(luad_normalized_counts, luad_adjusted_counts, luad_clinical) + ggtitle("
 ```
 
 ```{r brca-pca, fig.show="hold", fig.width=12, fig.height=5}
-plotPCA(brca_normalized_counts, brca_adjusted_counts, brca_clinical) + ggtitle("PCA for batch effect adjusted BRCA data")
+#plotPCA(brca_normalized_counts, brca_adjusted_counts, brca_clinical) + ggtitle("PCA for batch effect adjusted BRCA data")
 ```
 
 ```{r prad-pca, fig.show="hold", fig.width=12, fig.height=5}
-plotPCA(prad_normalized_counts, prad_adjusted_counts, prad_clinical) + ggtitle("PCA for batch effect adjusted PRAD data")
+#plotPCA(prad_normalized_counts, prad_adjusted_counts, prad_clinical) + ggtitle("PCA for batch effect adjusted PRAD data")
 ```
 
 
-```{r save-session, cache=FALSE}
+```{r save-session, cache=FALSE, eval=FALSE}
 save(file = 'luad-counts.RData', luad_clinical, luad_adjusted_counts)
 save(file = 'brca-counts.RData', brca_clinical, brca_adjusted_counts)
 save(file = 'prad-counts.RData', prad_clinical, prad_adjusted_counts)
