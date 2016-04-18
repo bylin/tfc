@@ -51,8 +51,7 @@ parseMetadata <- function(metadata_file, cancer_code) {
       parsed_metadata <- rbind(parsed_metadata, tp[which(tp$uploaded == max(tp$uploaded)), ], nt[which(nt$uploaded == max(nt$uploaded)), ])
     }
     singles <- metadata[-which(metadata$participant_id %in% parsed_metadata$participant_id), ]
-  }
-  else {
+  } else {
     singles <- metadata
   }
   # now for the unpaired samples
@@ -61,11 +60,11 @@ parseMetadata <- function(metadata_file, cancer_code) {
     ps <- subset(singles, participant_id == current_id) # get all samples for this participant
     parsed_metadata <- rbind(parsed_metadata, ps[which(ps$uploaded == max(ps$uploaded)), ])
   }
-  # create participant ID numbers and new filenames
-  numbering <- match(parsed_metadata$participant_id, unique(parsed_metadata$participant_id))
+  # create sample ID numbers and new filenames
+  numbering <- 1:nrow(parsed_metadata)
   parsed_metadata$shortids <- numbering
   numbering <- formatC(numbering, flag = "0", digits = 3)
-  parsed_metadata$shortnames <- paste0(cancer_code, "-", numbering, "-", parsed_metadata$sample_type)
+  parsed_metadata$shortnames <- paste0(cancer_code, "-", numbering)
   # reencode upload date as a string - it's encoded as a time object, screwing up data frame operations
   parsed_metadata$uploaded <- as.character(parsed_metadata$uploaded)
   parsed_metadata
@@ -95,7 +94,7 @@ for (cancer_code in names(metadatas)) {
     system(paste0('echo gtdownload -c $CGKEY -d ', analysis_id, cancer_code))
     system(paste0('gtdownload -c $CGKEY -d ', analysis_id))
   }
-  file.symlink(paste0(getwd(), '/', metadata$analysis_id, '/', metadata$barcode, '_mirna.bam'), paste0('/inside/grotto/blin/trna-markers/datasets/', cancer_code, '/', metadata$shortnames, '.bam'))
+  file.symlink(paste0(getwd(), '/', metadata$analysis_id, '/', metadata$barcode, '_mirna.bam'), paste0('/inside/grotto/blin/trna-markers/datasets/', cancer_code, '/mirna/', metadata$shortnames, '-raw.bam'))
 }
 setwd(currentwd)
 ```
@@ -108,9 +107,7 @@ To count both tRFs processed from mature and immature tRNAs, we need to map to b
 
 ### hg19
 
-Key changes:
-- --end-to-end prevents clipping
-- Andrew has a few settings that I've incorporated too, with his reasoning:
+Andrew has a few settings that I've incorporated too, with his reasoning:
   - --very-sensitive: necessary due to mismatch caused by modified base misreads 
   - --np 5 --ignore-quals: quality scores are irrelevant, and N should be scored as only slightly better than a mismatch. ignoring quals forces the mismatches to have a single score, which is necessary for precise N weighting.
 
@@ -118,34 +115,34 @@ Key changes:
 remap() {
   currentwd=`pwd`
   cd $1
-  for prefix in `ls *-TP.bam *-NT.bam | cut -f 1 -d .`; do
-    if [ ! -e $prefix-mapped.bam ]
+  for prefix in `ls *-raw.bam | cut -f 1,2 -d -`; do
+    if [ ! -e $prefix.bam ]
     then
       if [ ! -e $prefix.fastq ]
       then
-        bam2fastq --force -o $prefix# `readlink $prefix.bam`
-        mv ${prefix}_M $prefix.fastq
-        rm ${prefix}_1 ${prefix}_2
+        bam2fastq --force -o $prefix-raw# `readlink $prefix-raw.bam`
+        mv ${prefix}-raw_M $prefix.fastq
+        rm ${prefix}-raw_1 ${prefix}-raw_2
       fi
-      bowtie2 -x ~/grotto/data/hg19_plus_mature_tRNAs -k 100 --very-sensitive --ignore-quals --np 5 --end-to-end -p 20 -U ${prefix}.fastq -S $prefix-mapped-1.sam
-      samtools view -S -F 4 -h -u $prefix-mapped-1.sam | samtools view -F 512 -h  - > $prefix-mapped-2.sam
-      bowtie2-best-mapped.py $prefix-mapped-2.sam | samtools view -S -u - | samtools sort - $prefix-mapped # auto appends .bam
+      bowtie2 -x ~/grotto/data/hg19-tRNAgenome -k 100 --very-sensitive --ignore-quals --np 5 -p 32 -U ${prefix}.fastq -S $prefix-temp-1.sam
+      samtools view -S -F 4 -h -u $prefix-temp-1.sam | samtools view -F 512 -h  - > $prefix-temp-2.sam # filter out untemp and low quality reads
+      bowtie2-best-mapped.py $prefix-temp-2.sam | samtools view -S -u - | samtools sort - $prefix # auto appends .bam
     fi
     rm -f $prefix.fastq
-    rm -f $prefix-mapped-1.sam
-    rm -f $prefix-mapped-2.sam
+    rm -f $prefix-temp-1.sam
+    rm -f $prefix-temp-2.sam
   done
   cd $currentwd
 }
-remap /inside/grotto/blin/trna-markers/datasets/luad
-#remap /inside/grotto/blin/trna-markers/datasets/brca
-#remap /inside/grotto/blin/trna-markers/datasets/prad
-#remap /inside/grotto/blin/trna-markers/datasets/dlbc
-#remap /inside/grotto/blin/trna-markers/datasets/lihc
-#remap /inside/grotto/blin/trna-markers/datasets/coad
-#remap /inside/grotto/blin/trna-markers/datasets/paad
-#remap /inside/grotto/blin/trna-markers/datasets/tgct
-#remap /inside/grotto/blin/trna-markers/datasets/lgg
+remap /inside/grotto/blin/trna-markers/datasets/luad/mirna
+#remap /inside/grotto/blin/trna-markers/datasets/brca/mirna
+#remap /inside/grotto/blin/trna-markers/datasets/prad/mirna
+#remap /inside/grotto/blin/trna-markers/datasets/dlbc/mirna
+#remap /inside/grotto/blin/trna-markers/datasets/lihc/mirna
+#remap /inside/grotto/blin/trna-markers/datasets/coad/mirna
+#remap /inside/grotto/blin/trna-markers/datasets/paad/mirna
+#remap /inside/grotto/blin/trna-markers/datasets/tgct/mirna
+#remap /inside/grotto/blin/trna-markers/datasets/lgg/mirna
 ```
 
 ## Count reads
@@ -162,7 +159,7 @@ So here's each sRNA, by source and destination.
 - snoRNAs: hg19/DASHR
 
 ```{r count-features-function}
-countFeaturesFromBam <- function(metadata, srnas, dir = ".") {
+countFeaturesFromBam <- function(metadata, features, dir = ".") {
   metadata <- metadata[which(file.exists(paste0(dir, "/", metadata$shortnames, "-mapped.bam"))), ]
 
   # use a for loop because r will run out of memory
@@ -173,6 +170,7 @@ countFeaturesFromBam <- function(metadata, srnas, dir = ".") {
     sample <- readGAlignments(bamfile)
     sample <- convertChrNames(sample, "Ensembl")
     sample_counts <- data.frame(countOverlaps(features, sample, maxgap = 0, type = "within", minoverlap = 10))
+    colnames(sample_counts) <- row$barcode
     sample_counts
   }, mc.cores = 20)
   names <- unlist(lapply(counts, colnames))
@@ -185,7 +183,7 @@ countFeaturesFromBam <- function(metadata, srnas, dir = ".") {
 
 ```{r count-features-luad}
 luad_raw_counts <- countFeaturesFromBam(luad_metadata, srnas, '/inside/grotto/blin/trna-markers/datasets/luad/') 
-save(file = 'luad-counts.RData', luad_raw_counts)
+save(file = 'luad-counts.RData', luad_raw_counts) 
 ```
 
 ```{r count-features-brca}
