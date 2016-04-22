@@ -78,8 +78,8 @@ coxph(Surv(days_survived, vital_status) ~ gender, data = km_metadata)
 
 ### Race
 ```{r univariate-race}
-metadata = km_metadata[km_metadata$race %in% c("BLACK OR AFRICAN AMERICAN", "WHITE", "ASIAN"), ]
-metadata$race = droplevels(metadata$race)
+metadata = km_metadata
+levels(metadata$race) = list(White = "WHITE", Black = "BLACK OR AFRICAN AMERICAN", Asian = "ASIAN", Unknown = c("[Not Available", "[Not Evaluated]", "[Unknown]"))
 km = survfit(Surv(days_survived, vital_status) ~ race, data = metadata)
 coxph(Surv(days_survived, vital_status) ~ race, data = metadata)
 ```
@@ -136,22 +136,6 @@ srna_signature = hazard_ratios[order(hazard_ratios$pvalue), ][1:20, ]
 kable(srna_signature)
 ```
 
-### Expression heatmap
-
-```{r srna-heatmap, fig.width=10, fig.height=5}
-df = as.matrix(counts[rownames(counts) %in% rownames(hazard_ratios[rownames(hazard_ratios) %in% rownames(tsrna_signature), ]), ])
-# load subtype data
-load('/inside/grotto/blin/trna-markers/luad/cluster-subtypes/clusters.RData')
-clusters$subtype[!clusters$known] = "Unknown"
-metadata$subtype = as.factor(clusters$subtype[match(substr(metadata$barcode, 1, 12), clusters$barcode)])
-levels(metadata$stage) = list(I = c("Stage I", "Stage IA", "Stage IB"), II = c("Stage II", "Stage IIA", "Stage IIB"), III = c("Stage III", "Stage IIIA", "Stage IIIB"), IV = "Stage IV", Unknown = '[Not Available]')
-levels(metadata$n_stage) = list(N0 = "N0", N1 = "N1", N2 = "N2", N3 = "N3", Unknown = c("NX", "[Not Available]"))
-annot = data.frame(stage = metadata$stage, subtype = metadata$subtype, n_stage = metadata$n_stage)
-rownames(annot) = colnames(counts)
-annot_colors = list(stage = setNames(c(brewer.pal(4, "Set1"), "grey"), levels(metadata$stage)), subtype = setNames(c(brewer.pal(3, "Set2"), "grey"), levels(metadata$subtype)), n_stage = setNames(c(brewer.pal(4, "Set3"), "grey"), levels(metadata$n_stage)))
-pheatmap(df, annotation_col = annot, annotation_colors = annot_colors, fontsize = 8, scale = 'row', show_colnames = FALSE, color = brewer.pal(11, "RdBu"))
-```
-
 ## Train signatures
 
 ```{r train-signatures-function}
@@ -185,13 +169,25 @@ trainTestSignatures = function(dataset, features) {
 
 ```
 
+To get a sense of the data, let's look at all of the clinical covariates:
+
+```{r dataset-covariates}
+c(table(dataset$training_metadata$stage), table(dataset$testing_metadata$stage))
+c(table(dataset$training_metadata$m_stage), table(dataset$testing_metadata$m_stage))
+c(table(dataset$training_metadata$n_stage), table(dataset$testing_metadata$n_stage))
+c(table(ifelse(dataset$training_metadata$age > 65, ">65", "<=65")), table(ifelse(dataset$testing_metadata$age > 65, ">65", "<=65")))
+c(table(dataset$training_metadata$gender), table(dataset$testing_metadata$gender))
+c(table(dataset$training_metadata$smoker), table(dataset$testing_metadata$smoker))
+c(table(dataset$training_metadata$race), table(dataset$testing_metadata$race))
+```
+
 ### tsRNA signature performance
 
 ```{r train-signatures-tsrna}
 tsrna = trainTestSignatures(dataset, rownames(tsrna_signature))
 tsrna$coef
 coef(tsrna$cox)
-tsrna$km
+tsrna$km + ggtitle("")
 ```
 
 ### microRNA signature performance
@@ -200,7 +196,7 @@ tsrna$km
 mirna = trainTestSignatures(dataset, rownames(mirna_signature))
 mirna$coef
 coef(mirna$cox)
-mirna$km
+mirna$km + ggtitle("")
 ```
 
 ### Combined signature performance
@@ -209,7 +205,7 @@ mirna$km
 srna = trainTestSignatures(dataset, rownames(srna_signature))
 srna$coef
 coef(srna$cox)
-srna$km
+srna$km + ggtitle("")
 ```
 
 ### Predicting 3-year survival
@@ -272,6 +268,47 @@ kable(data.frame(Coef = cox$coef, Hazard = summary(cox)$conf.int[, 1], Lower = s
 ```
 
 Similar considerations as above. Hazard ratio doesn't change much, and confidence intervals widen. As a whole, lymph node spread is significant after adjusting for risk score. Interaction terms fail to reach significance.
+
+## Visualizations
+
+### Risk scores for sRNA signature
+
+```{r risk-score-plot, fig.width=12, fig.height=3}
+df = data.frame(Sample = as.character(dataset$testing_metadata$barcode), Score = srna$score, stringsAsFactors = FALSE)
+df = df[order(df$Score), ]
+df$Sample = factor(df$Sample, levels = df$Sample)
+ggplot(df) + geom_point(aes(x = Sample, y = Score)) + theme(axis.text.x = element_blank())
+```
+
+### Expression heatmaps
+
+```{r srna-heatmap-1, fig.width=8, fig.height=5}
+df = as.matrix(luad_adjusted_counts[rownames(luad_adjusted_counts) %in% rownames(hazard_ratios[rownames(hazard_ratios) %in% rownames(tsrna_signature), ]), ])
+# load subtype data
+load('/inside/grotto/blin/trna-markers/luad/cluster-subtypes/clusters.RData')
+clusters$subtype[!clusters$known] = "Unknown"
+metadata = luad_clinical
+metadata$subtype = as.factor(clusters$subtype[match(substr(metadata$barcode, 1, 12), clusters$barcode)])
+levels(metadata$stage) = list(I = c("Stage I", "Stage IA", "Stage IB"), II = c("Stage II", "Stage IIA", "Stage IIB"), III = c("Stage III", "Stage IIIA", "Stage IIIB"), IV = "Stage IV", Unknown = '[Not Available]')
+levels(metadata$n_stage) = list(N0 = "N0", N1 = "N1", N2 = "N2", N3 = "N3", Unknown = c("NX", "[Not Available]"))
+metadata[metadata$sample_type == "NT", ]$stage = "Unknown"
+metadata[metadata$sample_type == "NT", ]$n_stage = "Unknown"
+metadata[metadata$sample_type == "NT", ]$subtype = "Unknown"
+annot = data.frame(stage = metadata$stage, subtype = metadata$subtype, n_stage = metadata$n_stage, sample_type = metadata$sample_type)
+rownames(annot) = colnames(luad_adjusted_counts)
+annot_colors = list(stage = setNames(c(brewer.pal(4, "Set1"), "grey"), levels(metadata$stage)), subtype = setNames(c(brewer.pal(3, "Set2"), "grey"), levels(metadata$subtype)), n_stage = setNames(c(brewer.pal(4, "Set3"), "grey"), levels(metadata$n_stage)), setNames(c("#EF8A62", "#67A9CF"), levels(metadata$sample_type)))
+pheatmap(df, annotation_col = annot, annotation_colors = annot_colors, fontsize = 8, scale = 'row', show_colnames = FALSE, trace = "none", color = brewer.pal(11, "RdBu"))
+```
+
+```{r srna-heatmap-2, fig.width=10, fig.height=5}
+df = as.matrix(luad_adjusted_counts[rownames(luad_adjusted_counts) %in% rownames(hazard_ratios[1505:2616, ][order(hazard_ratios$pvalue[1505:2616]), ])[1:500], ])
+pheatmap(df, annotation_col = annot, annotation_colors = annot_colors, fontsize = 8, scale = 'row', show_colnames = FALSE, show_rownames = FALSE, color = brewer.pal(11, "RdBu"))
+```
+
+```{r srna-heatmap-3, fig.width=10, fig.height=5}
+df = as.matrix(luad_adjusted_counts[rownames(luad_adjusted_counts) %in% rownames(hazard_ratios[1:1505, ][order(hazard_ratios$pvalue[1:1505]), ])[1:500], ])
+pheatmap(df, annotation_col = annot, annotation_colors = annot_colors, fontsize = 8, scale = 'row', show_colnames = FALSE, show_rownames = FALSE, color = brewer.pal(11, "RdBu"))
+```
 
 
 ```{r save-session, echo=FALSE, results='hide', cache=FALSE}
