@@ -1,0 +1,104 @@
+# scale-counts
+_Last modified `r format(Sys.time(), "%I:%M %p on %b %d, %Y")`. This document, R session image, version history, knitr cache, figures, and other associated datasets are located in `/inside/grotto/blin/trna-markers/process-reads/`._
+
+```{r setup, echo=FALSE, warning=FALSE, results=FALSE, message=FALSE, errors=FALSE, cache=FALSE}
+library(knitr)
+opts_chunk$set(cache = TRUE, cache.path = "/inside/grotto/blin/trna-markers/process-reads/cache/scale-counts/", fig.path = "/inside/grotto/blin/trna-markers/process-reads/figure/scale-counts/", eval = TRUE, echo = TRUE, warning = FALSE, results = FALSE, message = FALSE, autodep = TRUE, dev = "png", dpi = 300)
+```
+
+```{r libraries, cache=FALSE}
+```
+
+
+### Normalized counts
+
+- Remove features that don't exist in at least 5% of the samples
+- Remove features that have a combined count total of less than 20bp
+- Normalization involves calculating size factors, 
+
+```{r normalize-counts}
+normalizeCounts <- function(counts, metadata) {
+  counts <- counts[apply(counts, 1, function(row) length(which(row > 0)) > length(colnames(counts)) * 0.05), ]
+  counts <- counts[apply(counts, 1, function(row) sum(as.numeric(row)) > 20), ]
+  col_data <- data.frame(row.names = colnames(counts), condition = metadata[match(colnames(counts), metadata$barcode), ]$sample_type, type = 'single-read')
+  dds <- DESeqDataSetFromMatrix(countData = counts, colData = col_data, design = ~ condition)
+  # DESeq2 calculates geometric mean - not helpful if there's a count of 0. I don't want to use pseudocounts, so I'll use TMM instead
+  sizeFactors(dds) <- calcNormFactors(counts(dds))
+  counts(dds, normalized = TRUE)
+}
+luad_normalized_counts <- normalizeCounts(luad_raw_counts, luad_metadata)
+#brca_normalized_counts <- normalizeCounts(brca_raw_counts, brca_metadata)
+#prad_normalized_counts <- normalizeCounts(prad_raw_counts, prad_metadata)
+```
+
+MA plots are log mean of counts (x axis) vs log fold change (y axis). But we don't need log mean of counts, mean of counts should do nicely.
+
+```{r normalization-ma, fig.width=12, fig.height=4, fig.show='hold'}
+plotMA <- function(raw_counts, normalized_counts, metadata, srnas) {
+  srnas$class <- as.character(srnas$class)
+  srnas[str_detect(srnas$class, "mi")]$class <- "miRNA"
+  srnas[srnas$class %in% c("trf-1", "trf-3", 'trf-5', 'actRF-3', 'actRF-5')]$class <- "tsRNA"
+  srnas[srnas$class %in% c('fivehalf', 'threehalf')]$class <- 'tRNA half'
+  srnas[srnas$class %in% c("tRNA-5p", "tRNA-3p", "trailer")]$class <- 'tRNA flanking'
+
+  tp_barcodes <- metadata[metadata$sample_type == "TP" & metadata$barcode %in% colnames(normalized_counts), ]$barcode
+  nt_barcodes <- metadata[metadata$sample_type == "NT" & metadata$barcode %in% colnames(normalized_counts), ]$barcode
+  # just use pseudocounts - this is just diagnostic and not used in actual data.
+  raw_tp_counts <- rowMeans(raw_counts[, tp_barcodes]) + 1
+  raw_nt_counts <- rowMeans(raw_counts[, nt_barcodes]) + 1
+  tp_counts <- rowMeans(normalized_counts[, tp_barcodes]) + 1
+  nt_counts <- rowMeans(normalized_counts[, nt_barcodes]) + 1
+  df <- rbind(data.frame(log2FC = log2(raw_tp_counts) - log2(raw_nt_counts), log2counts = log2((raw_tp_counts + raw_nt_counts)/2), normalized = "Raw", sRNA = srnas$class[match(names(raw_tp_counts), srnas$tx_name)]),
+              data.frame(log2FC = log2(tp_counts) - log2(nt_counts), log2counts = log2((tp_counts + nt_counts)/2), normalized = "Normalized", sRNA = srnas$class[match(names(tp_counts), srnas$tx_name)]))
+  ggplot(df) + geom_point(aes(x = log2counts, y = log2FC, color = sRNA), size = 1, alpha = 0.3) + geom_hline(yintercept = 0, color = "red") + facet_wrap(~ normalized)
+}
+plotMA(luad_raw_counts, luad_normalized_counts, luad_metadata, srnas) + ggtitle("LUAD MA plot")
+#plotMA(brca_raw_counts, brca_normalized_counts, brca_metadata, srnas) + ggtitle("BRCA MA plot")
+#plotMA(prad_raw_counts, prad_normalized_counts, prad_metadata, srnas) + ggtitle("PRAD MA plot")
+```
+
+
+## Check for batch effects
+
+```{r batch-effects}
+removeBatchEffects <- function(metadata, counts) {
+  metadata <- metadata[match(colnames(counts), metadata$barcode), ]
+  mod <- model.matrix(~ sample_type, data = metadata)
+  mod <- mod[!is.na(metadata$batch), ]
+  counts <- counts[, -which(is.na(metadata$batch))]
+  batch <- as.factor(as.character(metadata$batch[!is.na(metadata$batch)]))
+  ComBat(dat = counts, batch = batch, mod = mod)
+}
+luad_adjusted_counts <- removeBatchEffects(luad_clinical, luad_normalized_counts)
+#brca_adjusted_counts <- removeBatchEffects(brca_clinical, brca_normalized_counts)
+#prad_adjusted_counts <- removeBatchEffects(prad_clinical, prad_normalized_counts) 
+```
+
+```{r pca-function}
+plotPCA <- function(normalized_counts, adjusted_counts, metadata) {
+  pca_before <- prcomp(t(normalized_counts), scale = TRUE)
+  pca_after <- prcomp(t(adjusted_counts), scale = TRUE)
+  df <- rbind(data.frame(PC1 = pca_before$x[, 1], PC2 = pca_before$x[, 2], adjusted = "Not adjusted"), data.frame(PC1 = pca_after$x[, 1], PC2 = pca_after$x[, 2], adjusted = "Adjusted"))
+  df$sample_type <- metadata[match(c(rownames(pca_before$x), rownames(pca_after$x)), metadata$barcode), ]$sample_type
+  df$batch <- metadata[match(c(rownames(pca_before$x), rownames(pca_after$x)), metadata$barcode), ]$batch
+  ggplot(df) + geom_point(aes(x = PC1, y = PC2, color = batch, shape = batch, size = sample_type), alpha = 0.3) + scale_shape_manual(values = c(1:22, 34:60)[1:nlevels(df$batch)]) + scale_size_manual(values = c(2, 5)) + guides(color = guide_legend(ncol = 2), shape = guide_legend(ncol = 2), size = guide_legend(ncol = 2)) + facet_wrap(~ adjusted)
+}
+``` 
+
+```{r luad-pca, fig.show="hold", fig.width=12, fig.height=5}
+plotPCA(luad_normalized_counts, luad_adjusted_counts, luad_clinical) + ggtitle("PCA for batch effect adjusted LUAD data")
+```
+
+```{r brca-pca, fig.show="hold", fig.width=12, fig.height=5}
+#plotPCA(brca_normalized_counts, brca_adjusted_counts, brca_clinical) + ggtitle("PCA for batch effect adjusted BRCA data")
+```
+
+```{r prad-pca, fig.show="hold", fig.width=12, fig.height=5}
+#plotPCA(prad_normalized_counts, prad_adjusted_counts, prad_clinical) + ggtitle("PCA for batch effect adjusted PRAD data")
+```
+
+
+
+```{r save-session, echo=FALSE, cache=FALSE}
+save.session("scale-counts.RSession")
+```

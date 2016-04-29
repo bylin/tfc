@@ -954,7 +954,7 @@ img.mfp-img {
 <body>
 <h1>Process data</h1>
 
-<p><em>Last modified <code class="knitr inline">12:01 PM on Apr 18, 2016</code>. This document, R session image, knitr cache, figures, and other associated datasets are located in <code>cruncher:/inside/grotto/blin/trna-markers/process-reads/</code>.</em></p>
+<p><em>Last modified <code class="knitr inline">05:38 PM on Apr 28, 2016</code>. This document, R session image, knitr cache, figures, and other associated datasets are located in <code>cruncher:/inside/grotto/blin/trna-markers/process-reads/</code>.</em></p>
 
 <div class="chunk" id="libraries"><div class="rcode"><div class="source"><pre class="knitr r">library(stringr)
 library(GenomicRanges)
@@ -983,13 +983,13 @@ load('/inside/grotto/blin/data/hg19-srnas.RData')
 </ul></li>
 </ul>
 
-<h2>Download raw reads and metadata</h2>
+<h2>Parse file and clinical metadata</h2>
 
 <div class="chunk" id="parse-metadata-function"><div class="rcode"><div class="source"><pre class="knitr r"># metadata_file: sample metadata downloaded from CGHub in tab delimited form
 # cancer_code: short abbreviation in lowercase describing the cancer type, e.g. "prad" or "luad"
 parseMetadata <- function(metadata_file, cancer_code) {
   metadata <- read.table(metadata_file, header = TRUE, sep = '\t', as.is = TRUE)
-  metadata <- metadata[, c('barcode', 'sample_type', 'filename', 'analysis_id', 'uploaded', 'participant_id')]
+  metadata <- metadata[, c('barcode', 'sample_type', 'filename', 'analysis_id', 'analyte_type', 'uploaded', 'participant_id')]
   # convert character "uploaded" column to date object for easier comparison
   metadata$uploaded <- strptime(gsub("/", "-", metadata$uploaded), "%Y-%m-%d")
   # start by getting matched pairs
@@ -1023,19 +1023,75 @@ parseMetadata <- function(metadata_file, cancer_code) {
   parsed_metadata$uploaded <- as.character(parsed_metadata$uploaded)
   parsed_metadata
 }
+processClinicalDataFile = function(biotab_file, batch_file) {
+  biotab = read.delim(biotab_file, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+  batches = read.table(batch_file, header = TRUE, sep = "\t", as.is = c(FALSE, TRUE))
+  biotab$bcr_patient_uuid = tolower(biotab$bcr_patient_uuid) # all data file ids are in lowercase, not sure if matters
+  biotab$days_survived = replace(biotab$death_days_to, biotab$death_days_to == "[Not Applicable]", biotab$last_contact_days_to[which(biotab$death_days_to == "[Not Applicable]")]) # either days from initial prognosis to death or initial prognosis to censor time
+  biotab$batch = batches[match(biotab$bcr_patient_barcode, substr(batches$barcode, 1, 12)), "batch"]
+  biotab
+}
 </pre></div>
 
 <p></div></div></p>
 
-<div class="chunk" id="parse-metadata"><div class="rcode"><div class="source"><pre class="knitr r">luad_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/luad-summary.tab', 'luad')
-brca_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/brca-summary.tab', 'brca')
-prad_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/prad-summary.tab', 'prad')
-dlbc_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/dlbc-summary.tab', 'dlbc')
-lihc_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/lihc-summary.tab', 'lihc')
-coad_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/coad-summary.tab', 'coad')
-paad_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/paad-summary.tab', 'paad')
-tgct_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/tgct-summary.tab', 'tgct')
-lgg_metadata <- parseMetadata('/inside/grotto/blin/trna-markers/process-reads/lgg-summary.tab', 'lgg')
+<div class="chunk" id="parse-metadata"><div class="rcode"><div class="source"><pre class="knitr r">luad_metadata = parseMetadata('/inside/grotto/blin/trna-markers/process-reads/luad-summary.tab', 'luad')
+brca_metadata = parseMetadata('/inside/grotto/blin/trna-markers/process-reads/brca-summary.tab', 'brca')
+prad_metadata = parseMetadata('/inside/grotto/blin/trna-markers/process-reads/prad-summary.tab', 'prad')
+dlbc_metadata = parseMetadata('/inside/grotto/blin/trna-markers/process-reads/dlbc-summary.tab', 'dlbc')
+lihc_metadata = parseMetadata('/inside/grotto/blin/trna-markers/process-reads/lihc-summary.tab', 'lihc')
+coad_metadata = parseMetadata('/inside/grotto/blin/trna-markers/process-reads/coad-summary.tab', 'coad')
+paad_metadata = parseMetadata('/inside/grotto/blin/trna-markers/process-reads/paad-summary.tab', 'paad')
+tgct_metadata = parseMetadata('/inside/grotto/blin/trna-markers/process-reads/tgct-summary.tab', 'tgct')
+lgg_metadata = parseMetadata('/inside/grotto/blin/trna-markers/process-reads/lgg-summary.tab', 'lgg')
+</pre></div>
+
+<p></div></div></p>
+
+<h2>Clinical data</h2>
+
+<div class="chunk" id="get-clinical-data"><div class="rcode"><div class="source"><pre class="knitr r">luad_clinical = processClinicalDataFile('luad-clinical-biotab-04032015.tab', 'luad-clinical-batches-04032015.tab')
+luad_clinical = with(luad_clinical[match(luad_metadata$participant_id, luad_clinical$bcr_patient_uuid), ], 
+                      data.frame(luad_metadata,
+                                 gender = gender, 
+                                 race = race,
+                                 smoker = ifelse(tobacco_smoking_history_indicator == "Lifelong Non-smoker", 0, 1), # NA doesn't return true or false, just NA. this is useful.
+                                 t_stage = ajcc_tumor_pathologic_pt, 
+                                 m_stage = ajcc_metastasis_pathologic_pm, 
+                                 n_stage = ajcc_nodes_pathologic_pn,
+                                 stage = ajcc_pathologic_tumor_stage,
+                                 days_survived = as.integer(days_survived), 
+                                 vital_status = ifelse(vital_status == "Alive", 0, 1),
+                                 age = age_at_initial_pathologic_diagnosis,
+                                 batch = batch))
+luad_metadata = luad_clinical
+# brca_clinical <- processClinicalDataFile('brca-clinical-biotab-04032015.tab', 'brca-clinical-batches-04032015.tab')
+# brca_clinical <- with(brca_clinical[match(brca_metadata$participant_id, brca_clinical$bcr_patient_uuid), ], 
+#                       data.frame(brca_metadata,
+#                                 ethnicity = ethnicity,
+#                                 race = race,
+#                                 vital_status = ifelse(vital_status == "Alive", 0, 1),
+#                                 days_survived = as.integer(days_survived),
+#                                 age = age_at_diagnosis,
+#                                 t_stage = ajcc_tumor_pathologic_pt, 
+#                                 m_stage = ajcc_metastasis_pathologic_pm, 
+#                                 n_stage = ajcc_nodes_pathologic_pn,
+#                                 stage = ajcc_pathologic_tumor_stage,
+#                                 er_status = er_status_by_ihc,
+#                                 pr_status = pr_status_by_ihc,
+#                                 her2_status = her2_status_by_ihc,
+#                                 batch = batch))
+# prad_clinical <- processClinicalDataFile('prad-clinical-biotab-04012015.tab', 'prad-clinical-batches-04012015.tab')
+# prad_clinical <- with(prad_clinical[match(prad_metadata$participant_id, prad_clinical$bcr_patient_uuid), ],
+#                       data.frame(prad_metadata,
+#                                  days_survived = as.integer(days_survived),
+#                                  vital_status = ifelse(vital_status == "Alive", 0, 1),
+#                                  t_stage = pathologic_T,
+#                                  m_stage = pathologic_M,
+#                                  n_stage = pathologic_N,
+#                                  gleason_score = as.integer(gleason_score),
+#                                  age = abs(round(as.integer(birth_days_to)/365)),
+#                                  batch = batch)) # maybe change to age_at _initial_pathologic_diagnosis? 
 </pre></div>
 
 <p></div></div></p>
@@ -10628,10 +10684,10 @@ remap /inside/grotto/blin/trna-markers/datasets/luad/mirna
 <div class="error"><pre class="knitr r">## Error in as.data.frame(matrix(unlist(counts), ncol = nrow(metadata))): error in evaluating the argument 'x' in selecting a method for function 'as.data.frame': Error in matrix(unlist(counts), ncol = nrow(metadata)) : data is too long
 </pre></div>
 
-<div class="source"><pre class="knitr r">save(file = 'luad-counts.RData', luad_raw_counts) 
+<div class="source"><pre class="knitr r">save(file = 'luad-raw-counts.RData', luad_raw_counts) 
 </pre></div>
 
-<div class="error"><pre class="knitr r">## Error in save(file = &quot;luad-counts.RData&quot;, luad_raw_counts): object 'luad_raw_counts' not found
+<div class="error"><pre class="knitr r">## Error in save(file = &quot;luad-raw-counts.RData&quot;, luad_raw_counts): object 'luad_raw_counts' not found
 </pre></div>
 
 <p></div></div></p>
@@ -10648,182 +10704,13 @@ remap /inside/grotto/blin/trna-markers/datasets/luad/mirna
 
 <p></div></div></p>
 
-<h3>Normalized counts</h3>
-
-<ul>
-<li>Remove features that don&#39;t exist in at least 5% of the samples</li>
-<li>Remove features that have a combined count total of less than 20bp</li>
-<li>Normalization involves calculating size factors, </li>
-</ul>
-
-<div class="chunk" id="normalize-counts"><div class="rcode"><div class="source"><pre class="knitr r">normalizeCounts <- function(counts, metadata) {
-    counts <- counts[apply(counts, 1, function(row) length(which(row > 0)) > length(colnames(counts)) * 0.05), ]
-    counts <- counts[apply(counts, 1, function(row) sum(as.numeric(row)) > 20), ]
-    col_data <- data.frame(row.names = colnames(counts), condition = metadata[match(colnames(counts), metadata$barcode), ]$sample_type, type = 'single-read')
-    dds <- DESeqDataSetFromMatrix(countData = counts, colData = col_data, design = ~ condition)
-  # DESeq2 calculates geometric mean - not helpful if there's a count of 0. I don't want to use pseudocounts, so I'll use TMM instead
-    sizeFactors(dds) <- calcNormFactors(counts(dds))
-    counts(dds, normalized = TRUE)
-}
-luad_normalized_counts <- normalizeCounts(luad_raw_counts, luad_metadata)
+<div class="chunk" id="save-session"><div class="rcode"><div class="source"><pre class="knitr r">save.session("process-reads.RSession")
 </pre></div>
 
-<div class="error"><pre class="knitr r">## Error in normalizeCounts(luad_raw_counts, luad_metadata): object 'luad_raw_counts' not found
-</pre></div>
-
-<div class="source"><pre class="knitr r">#brca_normalized_counts <- normalizeCounts(brca_raw_counts, brca_metadata)
-#prad_normalized_counts <- normalizeCounts(prad_raw_counts, prad_metadata)
-</pre></div>
-
-<p></div></div></p>
-
-<p>MA plots are log mean of counts (x axis) vs log fold change (y axis). But we don&#39;t need log mean of counts, mean of counts should do nicely.</p>
-
-<div class="chunk" id="normalization-ma"><div class="rcode"><div class="source"><pre class="knitr r">plotMA <- function(raw_counts, normalized_counts, metadata, srnas) {
-  srnas$class <- as.character(srnas$class)
-  srnas[str_detect(srnas$class, "mi")]$class <- "miRNA"
-  srnas[srnas$class %in% c("trf-1", "trf-3", 'trf-5', 'actRF-3', 'actRF-5')]$class <- "tsRNA"
-  srnas[srnas$class %in% c('fivehalf', 'threehalf')]$class <- 'tRNA half'
-  srnas[srnas$class %in% c("tRNA-5p", "tRNA-3p", "trailer")]$class <- 'tRNA flanking'
-
-  tp_barcodes <- metadata[metadata$sample_type == "TP" & metadata$barcode %in% colnames(normalized_counts), ]$barcode
-  nt_barcodes <- metadata[metadata$sample_type == "NT" & metadata$barcode %in% colnames(normalized_counts), ]$barcode
-  # just use pseudocounts - this is just diagnostic and not used in actual data.
-  raw_tp_counts <- rowMeans(raw_counts[, tp_barcodes]) + 1
-  raw_nt_counts <- rowMeans(raw_counts[, nt_barcodes]) + 1
-  tp_counts <- rowMeans(normalized_counts[, tp_barcodes]) + 1
-  nt_counts <- rowMeans(normalized_counts[, nt_barcodes]) + 1
-  df <- rbind(data.frame(log2FC = log2(raw_tp_counts) - log2(raw_nt_counts), log2counts = log2((raw_tp_counts + raw_nt_counts)/2), normalized = "Raw", sRNA = srnas$class[match(names(raw_tp_counts), srnas$tx_name)]),
-              data.frame(log2FC = log2(tp_counts) - log2(nt_counts), log2counts = log2((tp_counts + nt_counts)/2), normalized = "Normalized", sRNA = srnas$class[match(names(tp_counts), srnas$tx_name)]))
-  ggplot(df) + geom_point(aes(x = log2counts, y = log2FC, color = sRNA), size = 1, alpha = 0.3) + geom_hline(yintercept = 0, color = "red") + facet_wrap(~ normalized)
-}
-plotMA(luad_raw_counts, luad_normalized_counts, luad_metadata, srnas) + ggtitle("LUAD MA plot")
-</pre></div>
-
-<div class="error"><pre class="knitr r">## Error in `[[&lt;-`(`*tmp*`, name, value = &quot;tsRNA&quot;): 1 elements in value to replace 0 elements
-</pre></div>
-
-<div class="source"><pre class="knitr r">#plotMA(brca_raw_counts, brca_normalized_counts, brca_metadata, srnas) + ggtitle("BRCA MA plot")
-#plotMA(prad_raw_counts, prad_normalized_counts, prad_metadata, srnas) + ggtitle("PRAD MA plot")
-</pre></div>
-
-<p></div></div></p>
-
-<h2>Clinical data</h2>
-
-<div class="chunk" id="get-clinical-data"><div class="rcode"><div class="source"><pre class="knitr r">processClinicalDataFile <- function(biotab_file, batch_file) {
-  biotab <- read.delim(biotab_file, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
-  batches <- read.table(batch_file, header = TRUE, sep = "\t", as.is = c(FALSE, TRUE))
-  biotab$bcr_patient_uuid <- tolower(biotab$bcr_patient_uuid) # all data file ids are in lowercase, not sure if matters
-  biotab$days_survived <- replace(biotab$death_days_to, biotab$death_days_to == "[Not Applicable]", biotab$last_contact_days_to[which(biotab$death_days_to == "[Not Applicable]")]) # either days from initial prognosis to death or initial prognosis to censor time
-  biotab$batch <- batches[match(biotab$bcr_patient_barcode, substr(batches$barcode, 1, 12)), "batch"]
-  biotab
-}
-luad_clinical <- processClinicalDataFile('luad-clinical-biotab-04032015.tab', 'luad-clinical-batches-04032015.tab')
-luad_clinical <- with(luad_clinical[match(luad_metadata$participant_id, luad_clinical$bcr_patient_uuid), ], 
-                      data.frame(luad_metadata,
-                                gender = gender, 
-                                race = race,
-                                smoker = ifelse(tobacco_smoking_history_indicator == "Lifelong Non-smoker", 0, 1), # NA doesn't return true or false, just NA. this is useful.
-                                t_stage = ajcc_tumor_pathologic_pt, 
-                                m_stage = ajcc_metastasis_pathologic_pm, 
-                                n_stage = ajcc_nodes_pathologic_pn,
-                                stage = ajcc_pathologic_tumor_stage,
-                                days_survived = as.integer(days_survived), 
-                                vital_status = ifelse(vital_status == "Alive", 0, 1),
-                                age = age_at_initial_pathologic_diagnosis,
-                                batch = batch))
-# brca_clinical <- processClinicalDataFile('brca-clinical-biotab-04032015.tab', 'brca-clinical-batches-04032015.tab')
-# brca_clinical <- with(brca_clinical[match(brca_metadata$participant_id, brca_clinical$bcr_patient_uuid), ], 
-#                       data.frame(brca_metadata,
-#                                 ethnicity = ethnicity,
-#                                 race = race,
-#                                 vital_status = ifelse(vital_status == "Alive", 0, 1),
-#                                 days_survived = as.integer(days_survived),
-#                                 age = age_at_diagnosis,
-#                                 t_stage = ajcc_tumor_pathologic_pt, 
-#                                 m_stage = ajcc_metastasis_pathologic_pm, 
-#                                 n_stage = ajcc_nodes_pathologic_pn,
-#                                 stage = ajcc_pathologic_tumor_stage,
-#                                 er_status = er_status_by_ihc,
-#                                 pr_status = pr_status_by_ihc,
-#                                 her2_status = her2_status_by_ihc,
-#                                 batch = batch))
-# prad_clinical <- processClinicalDataFile('prad-clinical-biotab-04012015.tab', 'prad-clinical-batches-04012015.tab')
-# prad_clinical <- with(prad_clinical[match(prad_metadata$participant_id, prad_clinical$bcr_patient_uuid), ],
-#                       data.frame(prad_metadata,
-#                                  days_survived = as.integer(days_survived),
-#                                  vital_status = ifelse(vital_status == "Alive", 0, 1),
-#                                  t_stage = pathologic_T,
-#                                  m_stage = pathologic_M,
-#                                  n_stage = pathologic_N,
-#                                  gleason_score = as.integer(gleason_score),
-#                                  age = abs(round(as.integer(birth_days_to)/365)),
-#                                  batch = batch)) # maybe change to age_at _initial_pathologic_diagnosis? 
-</pre></div>
-
-<p></div></div></p>
-
-<h2>Check for batch effects</h2>
-
-<div class="chunk" id="batch-effects"><div class="rcode"><div class="source"><pre class="knitr r">removeBatchEffects <- function(metadata, counts) {
-  metadata <- metadata[match(colnames(counts), metadata$barcode), ]
-  mod <- model.matrix(~ sample_type, data = metadata)
-  mod <- mod[!is.na(metadata$batch), ]
-  counts <- counts[, -which(is.na(metadata$batch))]
-  batch <- as.factor(as.character(metadata$batch[!is.na(metadata$batch)]))
-  ComBat(dat = counts, batch = batch, mod = mod)
-}
-luad_adjusted_counts <- removeBatchEffects(luad_clinical, luad_normalized_counts)
-</pre></div>
-
-<div class="error"><pre class="knitr r">## Error in match(colnames(counts), metadata$barcode): error in evaluating the argument 'x' in selecting a method for function 'match': Error in colnames(counts) : 
-##   error in evaluating the argument 'x' in selecting a method for function 'colnames': Error: object 'luad_normalized_counts' not found
-</pre></div>
-
-<div class="source"><pre class="knitr r">#brca_adjusted_counts <- removeBatchEffects(brca_clinical, brca_normalized_counts)
-#prad_adjusted_counts <- removeBatchEffects(prad_clinical, prad_normalized_counts) 
-</pre></div>
-
-<p></div></div></p>
-
-<div class="chunk" id="pca-function"><div class="rcode"><div class="source"><pre class="knitr r">plotPCA <- function(normalized_counts, adjusted_counts, metadata) {
-  pca_before <- prcomp(t(normalized_counts), scale = TRUE)
-  pca_after <- prcomp(t(adjusted_counts), scale = TRUE)
-  df <- rbind(data.frame(PC1 = pca_before$x[, 1], PC2 = pca_before$x[, 2], adjusted = "Not adjusted"), data.frame(PC1 = pca_after$x[, 1], PC2 = pca_after$x[, 2], adjusted = "Adjusted"))
-  df$sample_type <- metadata[match(c(rownames(pca_before$x), rownames(pca_after$x)), metadata$barcode), ]$sample_type
-  df$batch <- metadata[match(c(rownames(pca_before$x), rownames(pca_after$x)), metadata$barcode), ]$batch
-  ggplot(df) + geom_point(aes(x = PC1, y = PC2, color = batch, shape = batch, size = sample_type), alpha = 0.3) + scale_shape_manual(values = c(1:22, 34:60)[1:nlevels(df$batch)]) + scale_size_manual(values = c(2, 5)) + guides(color = guide_legend(ncol = 2), shape = guide_legend(ncol = 2), size = guide_legend(ncol = 2)) + facet_wrap(~ adjusted)
-}
-</pre></div>
-
-<p></div></div></p>
-
-<div class="chunk" id="luad-pca"><div class="rcode"><div class="source"><pre class="knitr r">plotPCA(luad_normalized_counts, luad_adjusted_counts, luad_clinical) + ggtitle("PCA for batch effect adjusted LUAD data")
-</pre></div>
-
-<div class="error"><pre class="knitr r">## Error in t(normalized_counts): error in evaluating the argument 'x' in selecting a method for function 't': Error: object 'luad_normalized_counts' not found
-</pre></div>
-
-<p></div></div></p>
-
-<div class="chunk" id="brca-pca"><div class="rcode"><div class="source"><pre class="knitr r">#plotPCA(brca_normalized_counts, brca_adjusted_counts, brca_clinical) + ggtitle("PCA for batch effect adjusted BRCA data")
-</pre></div>
-
-<p></div></div></p>
-
-<div class="chunk" id="prad-pca"><div class="rcode"><div class="source"><pre class="knitr r">#plotPCA(prad_normalized_counts, prad_adjusted_counts, prad_clinical) + ggtitle("PCA for batch effect adjusted PRAD data")
-</pre></div>
-
-<p></div></div></p>
-
-<div class="chunk" id="save-session"><div class="rcode"><div class="source"><pre class="knitr r">save(file = 'luad-counts.RData', luad_clinical, luad_adjusted_counts)
-save(file = 'brca-counts.RData', brca_clinical, brca_adjusted_counts)
-save(file = 'prad-counts.RData', prad_clinical, prad_adjusted_counts)
-save(file = 'luad-metadata.RData', luad_clinical)
-save(file = 'brca-metadata.RData', brca_clinical)
-save(file = 'prad-metadata.RData', prad_clinical)
-save.session("process-reads.RSession")
+<div class="output"><pre class="knitr r">## Saving search path..
+## Saving list of loaded packages..
+## Saving all data...
+## Done.
 </pre></div>
 
 <p></div></div></p>
