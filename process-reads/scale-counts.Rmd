@@ -7,23 +7,26 @@ opts_chunk$set(cache = TRUE, cache.path = "/inside/grotto/blin/trna-markers/proc
 ```
 
 ```{r libraries, cache=FALSE}
+library(sva)
+library(DESeq2)
+load('/inside/grotto/blin/data/hg19-srnas.RData')
 ```
 
+## Scale counts
 
-### Normalized counts
+As a side step,
 
 - Remove features that don't exist in at least 5% of the samples
-- Remove features that have a combined count total of less than 20bp
-- Normalization involves calculating size factors, 
+- Remove features that have a combined count total of less than 20 reads
 
-```{r normalize-counts}
-normalizeCounts <- function(counts, metadata) {
+```{r scale-counts}
+scaleCounts <- function(counts, metadata) {
   counts <- counts[apply(counts, 1, function(row) length(which(row > 0)) > length(colnames(counts)) * 0.05), ]
   counts <- counts[apply(counts, 1, function(row) sum(as.numeric(row)) > 20), ]
   col_data <- data.frame(row.names = colnames(counts), condition = metadata[match(colnames(counts), metadata$barcode), ]$sample_type, type = 'single-read')
   dds <- DESeqDataSetFromMatrix(countData = counts, colData = col_data, design = ~ condition)
   # DESeq2 calculates geometric mean - not helpful if there's a count of 0. I don't want to use pseudocounts, so I'll use TMM instead
-  sizeFactors(dds) <- calcNormFactors(counts(dds))
+  dds <- estimateSizeFactors(counts(dds))
   counts(dds, normalized = TRUE)
 }
 luad_normalized_counts <- normalizeCounts(luad_raw_counts, luad_metadata)
@@ -31,7 +34,7 @@ luad_normalized_counts <- normalizeCounts(luad_raw_counts, luad_metadata)
 #prad_normalized_counts <- normalizeCounts(prad_raw_counts, prad_metadata)
 ```
 
-MA plots are log mean of counts (x axis) vs log fold change (y axis). But we don't need log mean of counts, mean of counts should do nicely.
+MA plots are log mean of counts (x axis) vs log fold change (y axis). But we don't need log mean of counts, mean of counts should do nicely. This is a good way to do some QA for scaling.
 
 ```{r normalization-ma, fig.width=12, fig.height=4, fig.show='hold'}
 plotMA <- function(raw_counts, normalized_counts, metadata, srnas) {
