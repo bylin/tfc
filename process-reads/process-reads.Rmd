@@ -11,11 +11,6 @@ library(stringr)
 library(GenomicRanges)
 library(GenomicAlignments)
 library(BiocParallel)
-library(reshape2)
-library(Biobase)
-library(DESeq2)
-library(edgeR)
-library(sva)
 source('/inside/grotto/blin/programs/convertChrNames.R')
 load('/inside/grotto/blin/data/hg19-srnas.RData')
 ```
@@ -218,13 +213,13 @@ So here's each sRNA, by source and destination.
 
 ```{r count-features-function}
 countFeaturesFromBam <- function(metadata, features, dir = ".") {
-  metadata <- metadata[which(file.exists(paste0(dir, "/", metadata$shortnames, "-mapped.bam"))), ]
+  metadata <- metadata[which(file.exists(paste0(dir, "/", metadata$shortnames, ".bam"))), ]
 
   # use a for loop because r will run out of memory
   counts <- mclapply(1:nrow(metadata), function(i) {
     row <- metadata[i, ]
     system(paste("echo Counting sRNAs from", row$shortnames))
-    bamfile <- paste0(dir, "/", row$shortnames, "-mapped.bam")
+    bamfile <- paste0(dir, "/", row$shortnames, ".bam")
     sample <- readGAlignments(bamfile)
     sample <- convertChrNames(sample, "Ensembl")
     sample_counts <- data.frame(countOverlaps(features, sample, maxgap = 0, type = "within", minoverlap = 10))
@@ -240,8 +235,8 @@ countFeaturesFromBam <- function(metadata, features, dir = ".") {
 ```
 
 ```{r count-features-luad}
-luad_raw_counts <- countFeaturesFromBam(luad_metadata, srnas, '/inside/grotto/blin/trna-markers/datasets/luad/') 
-save(file = 'luad-raw-counts.RData', luad_raw_counts) 
+luad_raw_counts <- countFeaturesFromBam(luad_metadata, srnas, '/inside/grotto/blin/trna-markers/datasets/luad/mirna/') 
+save(file = 'luad-raw-counts.RData', luad_raw_counts, luad_metadata) 
 ```
 
 ```{r count-features-brca}
