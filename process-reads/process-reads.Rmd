@@ -105,33 +105,35 @@ luad_clinical = with(luad_clinical[match(luad_metadata$participant_id, luad_clin
                                  age = age_at_initial_pathologic_diagnosis,
                                  batch = batch))
 luad_metadata = luad_clinical
-# brca_clinical <- processClinicalDataFile('brca-clinical-biotab-04032015.tab', 'brca-clinical-batches-04032015.tab')
-# brca_clinical <- with(brca_clinical[match(brca_metadata$participant_id, brca_clinical$bcr_patient_uuid), ], 
-#                       data.frame(brca_metadata,
-#                                 ethnicity = ethnicity,
-#                                 race = race,
-#                                 vital_status = ifelse(vital_status == "Alive", 0, 1),
-#                                 days_survived = as.integer(days_survived),
-#                                 age = age_at_diagnosis,
-#                                 t_stage = ajcc_tumor_pathologic_pt, 
-#                                 m_stage = ajcc_metastasis_pathologic_pm, 
-#                                 n_stage = ajcc_nodes_pathologic_pn,
-#                                 stage = ajcc_pathologic_tumor_stage,
-#                                 er_status = er_status_by_ihc,
-#                                 pr_status = pr_status_by_ihc,
-#                                 her2_status = her2_status_by_ihc,
-#                                 batch = batch))
-# prad_clinical <- processClinicalDataFile('prad-clinical-biotab-04012015.tab', 'prad-clinical-batches-04012015.tab')
-# prad_clinical <- with(prad_clinical[match(prad_metadata$participant_id, prad_clinical$bcr_patient_uuid), ],
-#                       data.frame(prad_metadata,
-#                                  days_survived = as.integer(days_survived),
-#                                  vital_status = ifelse(vital_status == "Alive", 0, 1),
-#                                  t_stage = pathologic_T,
-#                                  m_stage = pathologic_M,
-#                                  n_stage = pathologic_N,
-#                                  gleason_score = as.integer(gleason_score),
-#                                  age = abs(round(as.integer(birth_days_to)/365)),
-#                                  batch = batch)) # maybe change to age_at _initial_pathologic_diagnosis? 
+brca_clinical <- processClinicalDataFile('brca-clinical-biotab-04032015.tab', 'brca-clinical-batches-04032015.tab')
+brca_clinical <- with(brca_clinical[match(brca_metadata$participant_id, brca_clinical$bcr_patient_uuid), ], 
+                      data.frame(brca_metadata,
+                                ethnicity = ethnicity,
+                                race = race,
+                                vital_status = ifelse(vital_status == "Alive", 0, 1),
+                                days_survived = as.integer(days_survived),
+                                age = age_at_diagnosis,
+                                t_stage = ajcc_tumor_pathologic_pt, 
+                                m_stage = ajcc_metastasis_pathologic_pm, 
+                                n_stage = ajcc_nodes_pathologic_pn,
+                                stage = ajcc_pathologic_tumor_stage,
+                                er_status = er_status_by_ihc,
+                                pr_status = pr_status_by_ihc,
+                                her2_status = her2_status_by_ihc,
+                                batch = batch))
+brca_metadata = brca_clinical
+prad_clinical <- processClinicalDataFile('prad-clinical-biotab-04012015.tab', 'prad-clinical-batches-04012015.tab')
+prad_clinical <- with(prad_clinical[match(prad_metadata$participant_id, prad_clinical$bcr_patient_uuid), ],
+                      data.frame(prad_metadata,
+                                 days_survived = as.integer(days_survived),
+                                 vital_status = ifelse(vital_status == "Alive", 0, 1),
+                                 t_stage = pathologic_T,
+                                 m_stage = pathologic_M,
+                                 n_stage = pathologic_N,
+                                 gleason_score = as.integer(gleason_score),
+                                 age = abs(round(as.integer(birth_days_to)/365)),
+                                 batch = batch)) # maybe change to age_at _initial_pathologic_diagnosis? 
+prad_metadata = prad_clinical
 ```
 
 
@@ -188,8 +190,8 @@ remap() {
   cd $currentwd
 }
 remap /inside/grotto/blin/trna-markers/datasets/luad/mirna
-#remap /inside/grotto/blin/trna-markers/datasets/brca/mirna
-#remap /inside/grotto/blin/trna-markers/datasets/prad/mirna
+remap /inside/grotto/blin/trna-markers/datasets/brca/mirna
+remap /inside/grotto/blin/trna-markers/datasets/prad/mirna
 #remap /inside/grotto/blin/trna-markers/datasets/dlbc/mirna
 #remap /inside/grotto/blin/trna-markers/datasets/lihc/mirna
 #remap /inside/grotto/blin/trna-markers/datasets/coad/mirna
@@ -222,7 +224,7 @@ countFeaturesFromBam <- function(metadata, features, dir = ".") {
     bamfile <- paste0(dir, "/", row$shortnames, ".bam")
     sample <- readGAlignments(bamfile)
     sample <- convertChrNames(sample, "Ensembl")
-    sample_counts <- data.frame(countOverlaps(features, sample, maxgap = 0, type = "within", minoverlap = 10))
+    sample_counts <- data.frame(countOverlaps(features, sample, minoverlap = 10)) 
     colnames(sample_counts) <- row$barcode
     sample_counts
   }, mc.cores = 20)
@@ -240,13 +242,13 @@ save(file = 'luad-raw-counts.RData', luad_raw_counts, luad_metadata)
 ```
 
 ```{r count-features-brca}
-#brca_raw_counts <- countFeaturesFromBam(brca_metadata, srnas, '/inside/grotto/blin/trna-markers/datasets/brca/')
-#save(file = 'brca-counts.RData', brca_raw_counts)
+brca_raw_counts <- countFeaturesFromBam(brca_metadata, srnas, '/inside/grotto/blin/trna-markers/datasets/brca/mirna/')
+save(file = 'brca-raw-counts.RData', brca_raw_counts)
 ```
 
 ```{r count-features-prad}
-#prad_raw_counts <- countFeaturesFromBam(prad_metadata, srnas, '/inside/grotto/blin/trna-markers/datasets/prad/')
-#save(file = 'prad-counts.RData', prad_raw_counts)
+prad_raw_counts <- countFeaturesFromBam(prad_metadata, srnas, '/inside/grotto/blin/trna-markers/datasets/prad/mirna/')
+save(file = 'prad-raw-counts.RData', prad_raw_counts)
 ```
 
 
