@@ -1,0 +1,100 @@
+# eda
+_Last modified `r format(Sys.time(), "%I:%M %p on %b %d, %Y")`. This document, R session image, version history, knitr cache, figures, and other associated datasets are located in `/inside/grotto/blin/trna-markers/luad/predict/`._
+
+```{r setup, echo=FALSE, warning=FALSE, results=FALSE, message=FALSE, errors=FALSE, cache=FALSE}
+library(knitr)
+opts_chunk$set(cache = TRUE, cache.path = "/inside/grotto/blin/trna-markers/luad/predict/cache/eda/", fig.path = "/inside/grotto/blin/trna-markers/luad/predict/figure/eda/", eval = TRUE, echo = TRUE, warning = FALSE, results = FALSE, message = FALSE, autodep = TRUE, dev = "png", dpi = 300)
+```
+
+```{r libraries, cache=FALSE}
+library(GenomicRanges)
+library(RColorBrewer)
+library(pheatmap)
+load('/inside/home/blin/grotto/trna-markers/process-reads/luad-counts.RData')
+load('/inside/grotto/blin/data/hg19-srnas.RData')
+```
+
+```{r fold-change}
+getLog2FC = function(counts, metadata) {
+  counts = counts - min(counts) + 1
+  paired_tp_samples = which(metadata$sample_type == "TP" & metadata$paired)
+  log2fc = data.frame(numeric(nrow(counts)))
+  median_nt_expression = apply(counts[, paired_tp_samples+1], 1, median)
+  for (i in 1:ncol(counts)) {
+    sample_metadata = metadata[i, ]
+    if (sample_metadata$sample_type == "NT") next
+    tp_counts = counts[, i]
+    if (sample_metadata$paired) nt_counts = counts[, i+1]
+    else nt_counts = median_nt_expression
+    log2fc = cbind(log2fc, log2(tp_counts) - log2(nt_counts))
+  }
+  colnames(log2fc) = metadata[metadata$sample_type == "TP", ]$barcode
+  log2fc[, -1]
+}
+log2fc = getLog2FC(luad_adjusted_counts, luad_metadata)
+```
+
+```{r log2fc-heatmap}
+metadata = luad_metadata[luad_metadata$barcode %in% colnames(log2fc), ]
+
+# subtype
+load('/inside/grotto/blin/trna-markers/luad/cluster-subtypes/clusters.RData')
+clusters$subtype[!clusters$known] = "Unknown"
+metadata$subtype = as.factor(clusters$subtype[match(substr(metadata$barcode, 1, 12), clusters$barcode)])
+# stage
+levels(metadata$stage) = list(I = c("Stage I", "Stage IA", "Stage IB"), II = c("Stage II", "Stage IIA", "Stage IIB"), III = c("Stage III", "Stage IIIA", "Stage IIIB"), IV = "Stage IV", Unknown = '[Not Available]')
+# n stage
+levels(metadata$n_stage) = list(N0 = "N0", N1 = "N1", N2 = "N2", N3 = "N3", Unknown = c("NX", "[Not Available]"))
+
+# heatmap annotation
+annot_col = data.frame(stage = metadata$stage, subtype = metadata$subtype, n_stage = metadata$n_stage)
+rownames(annot_col) = colnames(log2fc)
+annot_row = data.frame(sRNA = as.factor(srnas[match(rownames(log2fc), srnas$tx_name), ]$class))
+rownames(annot_row) = rownames(log2fc)
+annot_colors = list(stage = setNames(c(brewer.pal(4, "Set1"), "grey"), levels(metadata$stage)),
+                    subtype = setNames(c(brewer.pal(3, "Set2"), "grey"), levels(metadata$subtype)),
+                    n_stage = setNames(c(brewer.pal(4, "Set3"), "grey"), levels(metadata$n_stage)),
+                    sRNA = setNames(c(brewer.pal(9, "Set1"), "grey"), levels(annot_row$sRNA)))
+pheatmap(df, annotation_col = annot_col, annotation_row = annot_row, annotation_colors = annot_colors, fontsize = 8, scale = 'row', show_colnames = FALSE, show_rownames = FALSE, trace = "none", color = brewer.pal(11, "RdBu")) 
+```
+
+
+
+```{r srna-heatmap, eval=FALSE}
+gene_var = sapply(data.frame(t(luad_adjusted_counts)), var)
+# filter for top 20% of genes in terms of variance
+names(gene_var) = rownames(luad_adjusted_counts)
+#df = luad_adjusted_counts[which(gene_var > quantile(gene_var, 0.2)), ]
+df = luad_adjusted_counts
+# center counts around normal sample gene expression
+nt_samples = luad_metadata[luad_metadata$sample_type == "NT", ]
+df = luad_adjusted_counts[]
+
+# load subtype data
+load('/inside/grotto/blin/trna-markers/luad/cluster-subtypes/clusters.RData')
+clusters$subtype[!clusters$known] = "Unknown"
+metadata = luad_metadata[luad_metadata$barcode %in% colnames(df), ]
+metadata$sample_type = as.factor(metadata$sample_type)
+metadata$subtype = as.factor(clusters$subtype[match(substr(metadata$barcode, 1, 12), clusters$barcode)])
+levels(metadata$stage) = list(I = c("Stage I", "Stage IA", "Stage IB"), II = c("Stage II", "Stage IIA", "Stage IIB"), III = c("Stage III", "Stage IIIA", "Stage IIIB"), IV = "Stage IV", Unknown = '[Not Available]')
+levels(metadata$n_stage) = list(N0 = "N0", N1 = "N1", N2 = "N2", N3 = "N3", Unknown = c("NX", "[Not Available]"))
+metadata[metadata$sample_type == "NT", ]$stage = "Unknown"
+metadata[metadata$sample_type == "NT", ]$n_stage = "Unknown"
+metadata[metadata$sample_type == "NT", ]$subtype = "Unknown"
+annot_col = data.frame(stage = metadata$stage, subtype = metadata$subtype, n_stage = metadata$n_stage, sample_type = metadata$sample_type)
+rownames(annot_col) = colnames(df)
+annot_row = data.frame(sRNA = as.factor(srnas[match(rownames(df), srnas$tx_name), ]$class))
+rownames(annot_row) = rownames(df)
+annot_colors = list(stage = setNames(c(brewer.pal(4, "Set1"), "grey"), levels(metadata$stage)), subtype = setNames(c(brewer.pal(3, "Set2"), "grey"), levels(metadata$subtype)), n_stage = setNames(c(brewer.pal(4, "Set3"), "grey"), levels(metadata$n_stage)), setNames(c("#EF8A62", "#67A9CF"), levels(metadata$sample_type)), sRNA = setNames(c(brewer.pal(9, "Set1"), "grey"), levels(annot_row$sRNA)))
+pheatmap(df, annotation_col = annot_col, annotation_row = annot_row, annotation_colors = annot_colors, fontsize = 8, scale = 'row', show_colnames = FALSE, show_rownames = FALSE, trace = "none", color = brewer.pal(11, "RdBu")) 
+```
+
+```{r mirna-heatmap, fig.width=15, fig.height=10, eval=FALSE}
+df2 = df[annot_row$sRNA == "miRNA", ]
+pheatmap(df2, annotation_col = annot_col, annotation_row = annot_row[annot_row$sRNA == "miRNA", ], annotation_colors = annot_colors, fontsize = 8, scale = 'row', show_colnames = FALSE, show_rownames = FALSE, trace = "none", color = brewer.pal(11, "RdBu"))
+```
+
+
+```{r save-session, echo=FALSE, cache=FALSE}
+save.session("eda.RSession")
+```
