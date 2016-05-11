@@ -190,8 +190,8 @@ remap() {
   cd $currentwd
 }
 remap /inside/grotto/blin/trna-markers/datasets/luad/mirna
-remap /inside/grotto/blin/trna-markers/datasets/brca/mirna
-remap /inside/grotto/blin/trna-markers/datasets/prad/mirna
+#remap /inside/grotto/blin/trna-markers/datasets/brca/mirna
+#remap /inside/grotto/blin/trna-markers/datasets/prad/mirna
 #remap /inside/grotto/blin/trna-markers/datasets/dlbc/mirna
 #remap /inside/grotto/blin/trna-markers/datasets/lihc/mirna
 #remap /inside/grotto/blin/trna-markers/datasets/coad/mirna
@@ -237,18 +237,21 @@ countFeaturesFromBam <- function(metadata, features, dir = ".") {
 ```
 
 ```{r count-features-luad}
-luad_raw_counts <- countFeaturesFromBam(luad_metadata, srnas, '/inside/grotto/blin/trna-markers/datasets/luad/mirna/') 
-save(file = 'luad-raw-counts.RData', luad_raw_counts, luad_metadata) 
+luad_raw_counts <- countFeaturesFromBam(luad_metadata, srnas, '/inside/grotto/blin/trna-markers/datasets/luad/mirna/')
+save(file = 'luad-raw-counts.RData', luad_raw_counts)
+save(file = 'luad-metadata.RData', luad_metadata) 
 ```
 
-```{r count-features-brca}
+```{r count-features-brca, eval=FALSE}
 brca_raw_counts <- countFeaturesFromBam(brca_metadata, srnas, '/inside/grotto/blin/trna-markers/datasets/brca/mirna/')
 save(file = 'brca-raw-counts.RData', brca_raw_counts)
+save(file = 'brca-metadata.RData', brca_metadata)
 ```
 
-```{r count-features-prad}
+```{r count-features-prad, eval=FALSE}
 prad_raw_counts <- countFeaturesFromBam(prad_metadata, srnas, '/inside/grotto/blin/trna-markers/datasets/prad/mirna/')
 save(file = 'prad-raw-counts.RData', prad_raw_counts)
+save(file = 'prad-metadata.RData', prad_metadata)
 ```
 
 
