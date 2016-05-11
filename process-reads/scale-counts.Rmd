@@ -10,6 +10,7 @@ opts_chunk$set(cache = TRUE, cache.path = "/inside/grotto/blin/trna-markers/proc
 library(sva)
 library(DESeq2)
 library(stringr)
+library(plyr)
 load('/inside/grotto/blin/data/hg19-srnas.RData')
 ```
 
@@ -26,8 +27,8 @@ As a side step,
 
 ```{r scale-counts}
 scaleCounts <- function(counts, metadata) {
-  counts <- counts[apply(counts, 1, function(row) length(which(row > 0)) > length(colnames(counts)) * 0.05), ]
-  counts <- counts[apply(counts, 1, function(row) sum(as.numeric(row)) > 20), ]
+  #counts <- counts[apply(counts, 1, function(row) length(which(row > 0)) > length(colnames(counts)) * 0.05), ]
+  counts <- counts[apply(counts, 1, function(row) sum(as.numeric(row)) > 0), ]
   col_data <- data.frame(row.names = colnames(counts), condition = metadata[match(colnames(counts), metadata$barcode), ]$sample_type, type = 'single-read')
   dds <- DESeqDataSetFromMatrix(countData = counts, colData = col_data, design = ~ condition)
   # DESeq2 calculates geometric mean - not helpful if there's a count of 0. I don't want to use pseudocounts, so I'll use TMM instead
@@ -67,11 +68,11 @@ removeBatchEffects <- function(metadata, counts) {
   metadata <- metadata[match(colnames(counts), metadata$barcode), ]
   mod <- model.matrix(~ sample_type, data = metadata)
   mod <- mod[!is.na(metadata$batch), ]
-  counts <- counts[, -which(is.na(metadata$batch))]
+  counts <- log1p(counts[, -which(is.na(metadata$batch))])
   batch <- as.factor(as.character(metadata$batch[!is.na(metadata$batch)]))
-  ComBat(dat = counts, batch = batch, mod = mod)
+  exp(ComBat(dat = counts, batch = batch, mod = mod))
 }
-luad_adjusted_counts <- removeBatchEffects(luad_metadata, luad_scaled_counts)
+luad_adjusted_counts = removeBatchEffects(luad_metadata, luad_scaled_counts)
 #brca_adjusted_counts <- removeBatchEffects(brca_clinical, brca_scaled_counts)
 #prad_adjusted_counts <- removeBatchEffects(prad_clinical, prad_scaled_counts) 
 ```
@@ -85,10 +86,16 @@ plotPCA <- function(scaled_counts, adjusted_counts, metadata) {
   df$batch <- metadata[match(c(rownames(pca_before$x), rownames(pca_after$x)), metadata$barcode), ]$batch
   ggplot(df) + geom_point(aes(x = PC1, y = PC2, color = batch, shape = batch, size = sample_type), alpha = 0.3) + scale_shape_manual(values = c(1:22, 34:60)[1:nlevels(df$batch)]) + scale_size_manual(values = c(2, 5)) + guides(color = guide_legend(ncol = 2), shape = guide_legend(ncol = 2), size = guide_legend(ncol = 2)) + facet_wrap(~ adjusted)
 }
-``` 
+readDistribution = function(scaled_counts, adjusted_counts) {
+  df = data.frame(counts = as.vector(scaled_counts), type = "Scaled")
+  df = rbind(df, data.frame(counts = as.vector(adjusted_counts), type = "Adjusted"))
+  ggplot(df) + geom_histogram(aes(x = counts)) + facet_wrap(~ type) + scale_y_log10()
+}
+```
 
 ```{r luad-pca, fig.show="hold", fig.width=12, fig.height=5}
 plotPCA(luad_scaled_counts, luad_adjusted_counts, luad_metadata) + ggtitle("PCA for batch effect adjusted LUAD data")
+readDistribution(luad_scaled_counts, luad_adjusted_counts)
 ```
 
 ```{r brca-pca, fig.show="hold", fig.width=12, fig.height=5}
@@ -100,6 +107,9 @@ plotPCA(luad_scaled_counts, luad_adjusted_counts, luad_metadata) + ggtitle("PCA 
 ```
 
 
+```{r save-data}
+save(file = 'luad-counts.RData', luad_adjusted_counts, luad_metadata)
+```
 
 ```{r save-session, echo=FALSE, cache=FALSE}
 save.session("scale-counts.RSession")
