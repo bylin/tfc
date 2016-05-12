@@ -214,24 +214,33 @@ So here's each sRNA, by source and destination.
 - snoRNAs: hg19/DASHR
 
 ```{r count-features-function}
-countFeaturesFromBam <- function(metadata, features, dir = ".") {
-  metadata <- metadata[which(file.exists(paste0(dir, "/", metadata$shortnames, ".bam"))), ]
-
+countFeaturesFromBam = function(metadata, features, dir = ".") {
+  metadata = metadata[which(file.exists(paste0(dir, "/", metadata$shortnames, ".bam"))), ]
+  trf1s_plus = features[features$class == "tRF-1" & strand(features) == "+"]
+  trf1s_minus = features[features$class == "tRF-1" & strand(features) == "-"]
+  trf3s = features[features$class == "tRF-3"]
+  trf5s = features[features$class == "tRF-5"]
+  features = features[!(features$class %in% c("tRF-1", "tRF-3", "tRF-5"))]
   # use a for loop because r will run out of memory
-  counts <- mclapply(1:nrow(metadata), function(i) {
-    row <- metadata[i, ]
+  counts = mclapply(1:nrow(metadata), function(i) {
+    row = metadata[i, ]
     system(paste("echo Counting sRNAs from", row$shortnames))
-    bamfile <- paste0(dir, "/", row$shortnames, ".bam")
-    sample <- readGAlignments(bamfile)
-    sample <- convertChrNames(sample, "Ensembl")
-    sample_counts <- data.frame(countOverlaps(features, sample, minoverlap = 10)) 
-    colnames(sample_counts) <- row$barcode
+    bamfile = paste0(dir, "/", row$shortnames, ".bam")
+    sample = readGAlignments(bamfile)
+    sample = convertChrNames(sample, "Ensembl")
+    sample_counts = rbind(data.frame(counts = countOverlaps(features, sample, minoverlap = 10)),
+                          data.frame(counts = countOverlaps(trf1s_plus, sample, minoverlap = 10, type = 'start')),
+                          data.frame(counts = countOverlaps(trf1s_minus, sample, minoverlap = 10, type = 'end')),
+                          data.frame(counts = countOverlaps(trf3s, sample, minoverlap = 10, type = 'end', maxgap = 3)), # in case of a CCA tail. We don't have to worry about aligning to 3 past the gap since these are the mature tRNAs.
+                          data.frame(counts = countOverlaps(trf5s, sample, minoverlap = 10, type = 'start')))
+    colnames(sample_counts) = row$barcode
     sample_counts
   }, mc.cores = 20)
-  names <- unlist(lapply(counts, colnames))
-  counts <- as.data.frame(matrix(unlist(counts), ncol = nrow(metadata)))
-  rownames(counts) <- srnas$tx_name
-  colnames(counts) <- names
+  names = unlist(lapply(counts, colnames))
+  counts = as.data.frame(matrix(unlist(counts), ncol = nrow(metadata)))
+  colnames(sample_counts) = c(features$tx_name, trf1s_plus$tx_name, trf1s_minus$tx_name, trf3s$tx_name, trf5s$tx_name)
+  rownames(counts) = srnas$tx_name
+  colnames(counts) = names
   counts
 }
 ```
