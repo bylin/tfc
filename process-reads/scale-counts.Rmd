@@ -109,7 +109,7 @@ readDistribution(luad_scaled_counts, luad_adjusted_counts)
 
 
 ```{r save-data}
-save(file = 'luad-counts.RData', luad_adjusted_counts, luad_metadata)
+save(file = 'luad-counts.RData', luad_adjusted_counts)
 ```
 
 ```{r save-session, echo=FALSE, cache=FALSE}
