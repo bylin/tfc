@@ -16,6 +16,7 @@ load('/inside/grotto/blin/data/hg19-srnas.RData')
 
 ```{r load-data}
 load('/inside/grotto/blin/trna-markers/process-reads/luad-raw-counts.RData')
+load('/inside/grotto/blin/trna-markers/process-reads/luad-metadata.RData')
 ```
 
 ## Scale counts
