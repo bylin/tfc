@@ -12,6 +12,7 @@ library(RColorBrewer)
 library(pheatmap)
 library(plyr)
 load('/inside/home/blin/grotto/trna-markers/process-reads/luad-counts.RData')
+load('/inside/home/blin/grotto/trna-markers/process-reads/luad-metadata.RData')
 load('/inside/grotto/blin/data/hg19-srnas.RData')
 ```
 
@@ -54,8 +55,12 @@ filterVariance = function(counts, var = 0.5) {
 
 Default metadata for all heatmaps
 
+```{r heatmap-data}
+counts = luad_adjusted_counts[rownames(luad_adjusted_counts) %in% srnas[srnas$class != 'tRNA']$tx_name, ]
+```
+
 ```{r heatmap-metadata}
-heatmap_metadata = luad_metadata[luad_metadata$barcode %in% colnames(luad_adjusted_counts), ]
+heatmap_metadata = luad_metadata[luad_metadata$barcode %in% colnames(counts), ]
 # subtype
 load('/inside/grotto/blin/trna-markers/luad/cluster-subtypes/clusters.RData')
 clusters$subtype[!clusters$known] = "Unknown"
@@ -65,13 +70,14 @@ levels(heatmap_metadata$stage) = list(I = c("Stage I", "Stage IA", "Stage IB"), 
 # n stage
 levels(heatmap_metadata$n_stage) = list(N0 = "N0", N1 = "N1", N2 = "N2", N3 = "N3", Unknown = c("NX", "[Not Available]"))
 # smoker
-levels(heatmap_metadata$smoker) = list(Smoker = 1, Nonsmoker = 0, Unknown = NA)
+heatmap_metadata$smoker = as.factor(heatmap_metadata$smoker)
+levels(heatmap_metadata$smoker) = list(Smoker = 1, Nonsmoker = 0)
 # heatmap annotation
 levels(heatmap_metadata$sample_type) = list(TP = "TP", NT = "NT")
 annot_col = data.frame(stage = heatmap_metadata$stage, subtype = heatmap_metadata$subtype, n_stage = heatmap_metadata$n_stage, sample_type = heatmap_metadata$sample_type, smoker = heatmap_metadata$smoker)
-rownames(annot_col) = colnames(luad_adjusted_counts)
-annot_row = data.frame(sRNA = as.factor(srnas[match(rownames(luad_adjusted_counts), srnas$tx_name), ]$class))
-rownames(annot_row) = rownames(luad_adjusted_counts)
+rownames(annot_col) = colnames(counts)
+annot_row = data.frame(sRNA = as.factor(srnas[match(rownames(counts), srnas$tx_name), ]$class))
+rownames(annot_row) = rownames(counts)
 annot_colors = list(stage = setNames(c(brewer.pal(4, "Set1"), "grey"), levels(heatmap_metadata$stage)),
                     subtype = setNames(c(brewer.pal(3, "Set2"), "grey"), levels(heatmap_metadata$subtype)),
                     n_stage = setNames(c(brewer.pal(4, "Set3"), "grey"), levels(heatmap_metadata$n_stage)),
@@ -84,9 +90,9 @@ annot_colors = list(stage = setNames(c(brewer.pal(4, "Set1"), "grey"), levels(he
 
 
 ```{r expression-heatmap}
-df = luad_adjusted_counts
+df = logp1(counts)
 df = df[rownames(df) %in% excludeExtraneousGenes(df), ]
-pheatmap(df, annotation_col = annot_col, annotation_row = annot_row, annotation_colors = annot_colors, fontsize = 8, scale = "row", show_colnames = FALSE, show_rownames = FALSE, trace = "none", color = brewer.pal(10, "Reds")) 
+pheatmap(df, annotation_col = annot_col, annotation_row = annot_row, annotation_colors = annot_colors, fontsize = 8,  show_colnames = FALSE, show_rownames = FALSE, trace = "none", color = brewer.pal(10, "Reds")) 
 ```
 
 ## Fold change heatmaps
@@ -110,7 +116,7 @@ getLog2FC = function(counts, metadata) {
   colnames(log2fc) = metadata[metadata$sample_type == "TP", ]$barcode
   log2fc[, -1]
 }
-log2fc = getLog2FC(luad_adjusted_counts, luad_metadata)
+log2fc = getLog2FC(counts, luad_metadata)
 ```
 
 ### General sRNA heatmap
@@ -151,7 +157,7 @@ pheatmap(df, annotation_col = annot_col, annotation_colors = annot_colors, fonts
 ### tRF heatmap
 
 ```{r trf-heatmap, fig.width=15, fig.height=15}
-df = log2fc[srnas[match(rownames(log2fc), srnas$tx_name), ]$class %in% c("tRF-1", "tRF-3", "tRF-5", "tRF-i"), ]
+df = log2fc[srnas[match(rownames(log2fc), srnas$tx_name), ]$class %in% c("tRF-1", "tRF-3", "tRF-5"), ]
 
 # filter for gene variance and extraneous genes
 genelist = excludeExtraneousGenes(df, 0.98)
