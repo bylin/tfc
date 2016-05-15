@@ -82,17 +82,17 @@ annot_colors = list(stage = setNames(c(brewer.pal(4, "Set1"), "grey"), levels(he
                     subtype = setNames(c(brewer.pal(3, "Set2"), "grey"), levels(heatmap_metadata$subtype)),
                     n_stage = setNames(c(brewer.pal(4, "Set3"), "grey"), levels(heatmap_metadata$n_stage)),
                     sample_type = setNames(c("#EF8A62", "#67A9CF"), levels(heatmap_metadata$sample_type)),
-                    smoker = setNames(c("#EF8A62", "#67A9CF", "grey"), levels(heatmap_metadata$smoker)),
-                    sRNA = setNames(c(brewer.pal(9, "Paired"), "grey"), levels(annot_row$sRNA)))
+                    smoker = setNames(c("#8dd3c7", "#ffffb3", "grey"), levels(heatmap_metadata$smoker)),
+                    sRNA = setNames(c(brewer.pal(8, "Paired"), "grey"), levels(annot_row$sRNA)))
 ```
 
 ## Expression heatmap
 
 
-```{r expression-heatmap}
-df = logp1(counts)
+```{r expression-heatmap, fig.width=15, fig.height=10}
+df = log1p(counts)
 df = df[rownames(df) %in% excludeExtraneousGenes(df), ]
-pheatmap(df, annotation_col = annot_col, annotation_row = annot_row, annotation_colors = annot_colors, fontsize = 8,  show_colnames = FALSE, show_rownames = FALSE, trace = "none", color = brewer.pal(10, "Reds")) 
+pheatmap(df, annotation_col = annot_col, annotation_row = annot_row, annotation_colors = annot_colors, fontsize = 8,  show_colnames = FALSE, show_rownames = FALSE, trace = "none", color = brewer.pal(9, "Reds")) 
 ```
 
 ## Fold change heatmaps
@@ -121,7 +121,7 @@ log2fc = getLog2FC(counts, luad_metadata)
 
 ### General sRNA heatmap
 
-```{r log2fc-heatmap-1, fig.width=15, fig.height=15}
+```{r log2fc-heatmap-1, fig.width=15, fig.height=10}
 metadata = heatmap_metadata[heatmap_metadata$barcode %in% colnames(log2fc), ]
 pheatmap(log2fc, annotation_col = annot_col, annotation_row = annot_row, annotation_colors = annot_colors, fontsize = 8, scale = "row", show_colnames = FALSE, show_rownames = FALSE, trace = "none", color = brewer.pal(10, "RdBu")) 
 ```
@@ -129,11 +129,16 @@ pheatmap(log2fc, annotation_col = annot_col, annotation_row = annot_row, annotat
 ```{r log2fc-heatmap-2, fig.width=15, fig.height=10}
 # filter out genes by correlation
 genelist = excludeExtraneousGenes(log2fc)
-table(srnas[match(genelist, srnas$tx_name), ]$class)
 df = log2fc[rownames(log2fc) %in% genelist, ]
+kable(data.frame(Original = table(srnas[match(rownames(log2fc), srnas$tx_name), ]$class), Noncorrelated = table(srnas[match(genelist, srnas$tx_name), ]$class)))
+
+# filter metadata
+metadata = heatmap_metadata[heatmap_metadata$barcode %in% colnames(df), ]
+pheatmap(df, annotation_col = annot_col, annotation_row = annot_row, annotation_colors = annot_colors, fontsize = 8, scale = "row", show_colnames = FALSE, show_rownames = FALSE, trace = "none", color = brewer.pal(10, "RdBu")) 
 
 # filter out genes by fold change variance
 df = filterVariance(df, 0.5)
+kable(data.frame(Noncorrelated = table(srnas[match(genelist, srnas$tx_name), ]$class), HiVariance = table(srnas[match(rownames(df), srnas$tx_name), ]$class)))
 # filter metadata
 metadata = heatmap_metadata[heatmap_metadata$barcode %in% colnames(df), ]
 pheatmap(df, annotation_col = annot_col, annotation_row = annot_row, annotation_colors = annot_colors, fontsize = 8, scale = "row", show_colnames = FALSE, show_rownames = FALSE, trace = "none", color = brewer.pal(10, "RdBu")) 
@@ -141,62 +146,90 @@ pheatmap(df, annotation_col = annot_col, annotation_row = annot_row, annotation_
 
 ### MicroRNA heatmap
 
-```{r mirna-heatmap, fig.width=15, fig.height=10}
-df = log2fc[srnas[match(rownames(log2fc), srnas$tx_name), ]$class == "miRNA", ]
+#### All miRNAs
 
+```{r mirna-heatmap-1, fig.width=15, fig.height=10}
+df = log2fc[srnas[match(rownames(log2fc), srnas$tx_name), ]$class == "miRNA", ]
+# heatmap annotation
+annot_colors2 = annot_colors
+annot_colors2$sRNA = NA
+pheatmap(df, annotation_col = annot_col, annotation_colors = annot_colors2, fontsize = 8, scale = "row", show_colnames = FALSE, show_rownames = FALSE, trace = "none", color = brewer.pal(10, "RdBu"))
+```
+
+#### Filtered miRNA heatmap
+
+```{r mirna-heatmap-2, fig.width=15, fig.height = 10}
 # filter for gene variance and extraneous genes
 df = df[rownames(df) %in% excludeExtraneousGenes(df), ]
-df = filterVariance(df, 0.9)
-metadata = heatmap_metadata[heatmap_metadata$barcode %in% colnames(df), ]
+df = filterVariance(df)
+pheatmap(df, annotation_col = annot_col, annotation_colors = annot_colors2, fontsize = 8, scale = "row", show_colnames = FALSE, show_rownames = TRUE, trace = "none", color = brewer.pal(10, "RdBu"))
+```
 
-# heatmap annotation
-annot_colors$sRNA = NA
-pheatmap(df, annotation_col = annot_col, annotation_colors = annot_colors, fontsize = 8, scale = "row", show_colnames = FALSE, show_rownames = TRUE, trace = "none", color = brewer.pal(10, "RdBu")) 
+#### Selected miRNAs
+
+Li et al. has a list of "significant" miRNAs, let's see if their prediction holds up in terms of log(fold change):
+
+```{r mirna-heatmap-li, fig.width=15, fig.height=8}
+df = log2fc[c("hsa-mir-196b", "hsa-mir-205", "hsa-mir-519a-1", "hsa-mir-31", "hsa-mir-7-1", "hsa-mir-193b", "hsa-mir-766", "hsa-mir-187", "hsa-let-7c", "hsa-mir-331", "hsa-mir-133a-1", "hsa-mir-375", "hsa-mir-323b", "hsa-mir-99a", "hsa-mir-101-1", "hsa-mir-374b"), ]
+pheatmap(df, annotation_col = annot_col, annotation_colors = annot_colors2, fontsize = 8, scale = "row", show_colnames = FALSE, show_rownames = TRUE, cluster_rows = FALSE, trace = "none", color = brewer.pal(10, "RdBu")) 
 ```
 
 ### tRF heatmap
 
-```{r trf-heatmap, fig.width=15, fig.height=15}
-df = log2fc[srnas[match(rownames(log2fc), srnas$tx_name), ]$class %in% c("tRF-1", "tRF-3", "tRF-5"), ]
+#### All tRFs
 
-# filter for gene variance and extraneous genes
-genelist = excludeExtraneousGenes(df, 0.98)
-df = df[rownames(df) %in% genelist, ]
-df = filterVariance(df, 0.5)
-metadata = heatmap_metadata[heatmap_metadata$barcode %in% colnames(df), ]
+```{r trf-heatmap-1, fig.width=15, fig.height=10}
+df = log2fc[srnas[match(rownames(log2fc), srnas$tx_name), ]$class %in% c("tRF-1", "tRF-3", "tRF-5", "genomic-tRF-3", "genomic-tRF-5", "tRF-i"), ]
 
 # heatmap annotation
-annot_row = data.frame(tRF = as.factor(srnas[match(rownames(df), srnas$tx_name), ]$class))
-rownames(annot_row) = rownames(df)
-annot_colors$sRNA = NA
-annot_colors$tRF = setNames(c(brewer.pal(4, "Dark2"), "grey"), levels(annot_row$tRF))
-pheatmap(df, annotation_col = annot_col, annotation_row = annot_row, annotation_colors = annot_colors, fontsize = 8, scale = "row", show_colnames = FALSE, show_rownames = TRUE, trace = "none", color = brewer.pal(10, "RdBu")) 
+annot_row2 = data.frame(tRF = as.factor(srnas[match(rownames(df), srnas$tx_name), ]$class))
+rownames(annot_row2) = rownames(df)
+annot_colors2 = annot_colors
+annot_colors2$tRF = setNames(brewer.pal(6, "Paired"), levels(annot_row2$tRF))
+pheatmap(df, annotation_col = annot_col, annotation_row = annot_row2, annotation_colors = annot_colors2, fontsize = 8, scale = "row", show_colnames = FALSE, show_rownames = FALSE, trace = "none", color = brewer.pal(10, "RdBu")) 
 ```
 
-#### Portable version
+#### Filtered tRF heatmap
 
-```{r trf-heatmap-2, fig.width=10, fig.height=8}
-pheatmap(df, annotation_col = annot_col, annotation_row = annot_row, annotation_colors = annot_colors, fontsize = 8, scale = "row", show_colnames = FALSE, show_rownames = FALSE, trace = "none", color = brewer.pal(10, "RdBu")) 
+```{r trf-heatmap-2, fig.width=15, fig.height=10}
+df = log2fc[srnas[match(rownames(log2fc), srnas$tx_name), ]$class %in% c("tRF-1", "tRF-3", "tRF-5", "tRF-i"), ]
+
+# heatmap annotation
+annot_row2 = data.frame(tRF = as.factor(srnas[match(rownames(df), srnas$tx_name), ]$class))
+rownames(annot_row2) = rownames(df)
+annot_colors2 = annot_colors
+annot_colors2$tRF = setNames(brewer.pal(4, "Set1"), levels(annot_row2$tRF))
+pheatmap(df, annotation_col = annot_col, annotation_row = annot_row2, annotation_colors = annot_colors2, fontsize = 8, scale = "row", show_colnames = FALSE, show_rownames = TRUE, trace = "none", color = brewer.pal(10, "RdBu")) 
+```
+
+```{r trf-heatmap-3, fig.width=15, fig.height=10}
+# filter for gene variance and extraneous genes
+df = df[rownames(df) %in% excludeExtraneousGenes(df), ]
+df = filterVariance(df)
+
+# heatmap annotation
+annot_row2 = data.frame(tRF = as.factor(srnas[match(rownames(df), srnas$tx_name), ]$class))
+rownames(annot_row2) = rownames(df)
+pheatmap(df, annotation_col = annot_col, annotation_row = annot_row2, annotation_colors = annot_colors2, fontsize = 8, scale = "row", show_colnames = FALSE, show_rownames = TRUE, trace = "none", color = brewer.pal(10, "RdBu")) 
 ```
 
 #### Sort samples by subtype
 
-```{r trf-heatmap-3, fig.width=15, fig.height=15}
+```{r trf-heatmap-subtype, fig.width=12, fig.height=8}
 df2 = df[, metadata[order(metadata$subtype), ]$barcode]
 df2 = df2[, metadata[order(metadata$subtype), ]$subtype %in% c("PP", "PI", "TRU")]
 annot_col2 = annot_col[colnames(df2), ]
-pheatmap(df2, annotation_col = annot_col2, annotation_row = annot_row, annotation_colors = annot_colors, cluster_cols = FALSE, fontsize = 8, scale = "row", show_colnames = FALSE, show_rownames = FALSE, trace = "none", color = brewer.pal(10, "RdBu"))  
+pheatmap(df2, annotation_col = annot_col2, annotation_row = annot_row2, annotation_colors = annot_colors2, cluster_cols = FALSE, fontsize = 8, scale = "row", show_colnames = FALSE, show_rownames = TRUE, trace = "none", color = brewer.pal(10, "RdBu"))  
 ```
 
 #### Sort samples by stage
 
-```{r trf-heatmap-4, fig.width=15, fig.height=15}
+```{r trf-heatmap-stage, fig.width=15, fig.height=10}
 df2 = df[, metadata[order(metadata$stage), ]$barcode]
 df2 = df2[, metadata[order(metadata$stage), ]$stage %in% c("I", "II", "III", "IV")]
 annot_col2 = annot_col[colnames(df2), ]
-pheatmap(df2, annotation_col = annot_col2, annotation_row = annot_row, annotation_colors = annot_colors, cluster_cols = FALSE, fontsize = 8, scale = "row", show_colnames = FALSE, show_rownames = FALSE, trace = "none", color = brewer.pal(10, "RdBu"))  
+pheatmap(df2, annotation_col = annot_col2, annotation_row = annot_row2, annotation_colors = annot_colors2, cluster_cols = FALSE, fontsize = 8, scale = "row", show_colnames = FALSE, show_rownames = TRUE, trace = "none", color = brewer.pal(10, "RdBu"))
 ```
-
 
 ```{r save-session, echo=FALSE, cache=FALSE}
 save.session("eda.RSession")
