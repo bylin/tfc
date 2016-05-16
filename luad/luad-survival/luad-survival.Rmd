@@ -16,7 +16,8 @@ source('/inside/home/blin/lib/R/ggsurv.R')
 source('/inside/grotto/blin/trna-markers/luad/predict/predict.R')
 load('/inside/home/blin/grotto/data/hg19-srnas.RData')
 load('/inside/home/blin/grotto/trna-markers/process-reads/luad-counts.RData')
-luad_clinical = luad_clinical[match(colnames(luad_adjusted_counts), luad_clinical$barcode), ]
+load('/inside/home/blin/grotto/trna-markers/process-reads/luad-metadata.RData')
+metadata = luad_metadata[match(colnames(luad_adjusted_counts), luad_metadata$barcode), ]
 ```
 
 ## Univariate survival analysis for clinical covariates
@@ -26,7 +27,7 @@ First, we'll independently test each covariate and feature to see what is implic
 ### Subtype
 
 ```{r univariate-subtype}
-km_metadata = na.omit(luad_clinical[luad_clinical$sample_type != "NT" & !is.na(luad_clinical$days_survived), ]) # get rid of NAs, remove normal samples (e.g. duplicates), and put the time period as 1 month - 8 years
+km_metadata = na.omit(metadata[metadata$sample_type != "NT" & !is.na(metadata$days_survived), ]) # get rid of NAs, remove normal samples (e.g. duplicates), and put the time period as 1 month - 8 years
 load('/inside/grotto/blin/trna-markers/luad/cluster-subtypes/clusters.RData')
 clusters = clusters[clusters$known, ]
 metadata = km_metadata[substr(km_metadata$barcode, 1, 12) %in% clusters$barcode, ]
@@ -98,8 +99,8 @@ Out of all of these, only lymph node involvement and cancer stage are significan
 ## Univariate survival analyses for features
 
 ```{r univariate-features}
-metadata = luad_clinical[luad_clinical$sample_type == "TP" & !is.na(luad_clinical$days_survived) & luad_clinical$days_survived > 0, ]
-counts = luad_adjusted_counts[rownames(luad_adjusted_counts) %in% c(unique(srnas[srnas$class %in% c("fivehalf", "threehalf", "trailer")]$tx_name), unique(srnas[str_detect(srnas$class, "mi")]$tx_name)), colnames(luad_adjusted_counts) %in% metadata$barcode]
+metadata = metadata[metadata$sample_type == "TP" & !is.na(metadata$days_survived) & metadata$days_survived > 0, ]
+counts = luad_adjusted_counts[rownames(luad_adjusted_counts) %in% c(unique(srnas[srnas$class %in% c("tRF-5", "tRF-3", "tRF-1", "tRF-i")]$tx_name), unique(srnas[str_detect(srnas$class, "mi")]$tx_name)), colnames(luad_adjusted_counts) %in% metadata$barcode]
 metadata$dummy = as.factor(1)
 dataset = setupTrainingTestingSets(metadata, "dummy", counts)
 features = rownames(counts)
@@ -287,7 +288,7 @@ df = as.matrix(luad_adjusted_counts[rownames(luad_adjusted_counts) %in% rownames
 # load subtype data
 load('/inside/grotto/blin/trna-markers/luad/cluster-subtypes/clusters.RData')
 clusters$subtype[!clusters$known] = "Unknown"
-metadata = luad_clinical
+metadata = metadata
 metadata$subtype = as.factor(clusters$subtype[match(substr(metadata$barcode, 1, 12), clusters$barcode)])
 levels(metadata$stage) = list(I = c("Stage I", "Stage IA", "Stage IB"), II = c("Stage II", "Stage IIA", "Stage IIB"), III = c("Stage III", "Stage IIIA", "Stage IIIB"), IV = "Stage IV", Unknown = '[Not Available]')
 levels(metadata$n_stage) = list(N0 = "N0", N1 = "N1", N2 = "N2", N3 = "N3", Unknown = c("NX", "[Not Available]"))
