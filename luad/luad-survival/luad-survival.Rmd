@@ -12,6 +12,7 @@ library(glmnet)
 library(GenomicRanges)
 library("RColorBrewer")
 library(pheatmap)
+library(Hmisc)
 source('/inside/home/blin/lib/R/ggsurv.R')
 source('/inside/grotto/blin/trna-markers/luad/predict/predict.R')
 load('/inside/home/blin/grotto/data/hg19-srnas.RData')
@@ -279,7 +280,7 @@ ggplot(df) + geom_point(aes(x = Sample, y = Score)) + theme(axis.text.x = elemen
 
 ### Expression heatmaps
 
-```{r srna-heatmap-1, fig.width=8, fig.height=5}
+```{r srna-heatmap-1, fig.width=12, fig.height=8}
 df = log1p(as.matrix(luad_adjusted_counts[rownames(luad_adjusted_counts) %in% rownames(hazard_ratios[rownames(hazard_ratios) %in% rownames(srna_signature), ]), ]))
 heatmap_metadata = luad_metadata[luad_metadata$barcode %in% colnames(df), ]
 # subtype
@@ -292,9 +293,12 @@ levels(heatmap_metadata$stage) = list(I = c("Stage I", "Stage IA", "Stage IB"), 
 levels(heatmap_metadata$n_stage) = list(N0 = "N0", N1 = "N1", N2 = "N2", N3 = "N3", Unknown = c("NX", "[Not Available]"))
 # smoker
 heatmap_metadata$smoker = as.factor(heatmap_metadata$smoker)
+# survival: Hmisc::cut2, splits days survived into quantiles
+heatmap_metadata$days_survived[heatmap_metadata$days_survived == 0] = NA
+heatmap_metadata$survival = with(heatmap_metadata, cut2(days_survived, g = 9))
 levels(heatmap_metadata$smoker) = list(Smoker = 1, Nonsmoker = 0)
 # heatmap annotation
-annot_col = data.frame(stage = heatmap_metadata$stage, subtype = heatmap_metadata$subtype, n_stage = heatmap_metadata$n_stage, smoker = heatmap_metadata$smoker)
+annot_col = data.frame(stage = heatmap_metadata$stage, subtype = heatmap_metadata$subtype, n_stage = heatmap_metadata$n_stage, smoker = heatmap_metadata$smoker, survival = heatmap_metadata$survival)
 rownames(annot_col) = colnames(df)
 annot_row = data.frame(sRNA = as.factor(srnas[match(rownames(df), srnas$tx_name), ]$class))
 rownames(annot_row) = rownames(df)
@@ -302,8 +306,9 @@ annot_colors = list(stage = setNames(c(brewer.pal(4, "Set1"), "grey"), levels(he
                     subtype = setNames(c(brewer.pal(3, "Set2"), "grey"), levels(heatmap_metadata$subtype)),
                     n_stage = setNames(c(brewer.pal(4, "Set3"), "grey"), levels(heatmap_metadata$n_stage)),
                     smoker = setNames(c("#8dd3c7", "#ffffb3", "grey"), levels(heatmap_metadata$smoker)),
+                    survival = setNames(c(brewer.pal(9, "Reds"), "grey"), levels(heatmap_metadata$survival)),
                     sRNA = setNames(c("#fc9272", "#de2d26", "#08519c"), levels(annot_row$sRNA)))
-pheatmap(df, annotation_col = annot_col, annotation_row = annot_row, annotation_colors = annot_colors, fontsize = 8,  show_colnames = FALSE, show_rownames = FALSE, trace = "none", color = brewer.pal(10, "Reds")) 
+pheatmap(df, annotation_col = annot_col, annotation_row = annot_row, annotation_colors = annot_colors, fontsize = 8,  show_colnames = FALSE, show_rownames = FALSE, trace = "none", color = brewer.pal(9, "Reds")) 
 ```
 
 
