@@ -13,6 +13,8 @@ library(GenomicRanges)
 library("RColorBrewer")
 library(pheatmap)
 library(Hmisc)
+library(reshape2)
+library(qvalue)
 source('/inside/home/blin/lib/R/ggsurv.R')
 source('/inside/grotto/blin/trna-markers/luad/predict/predict.R')
 load('/inside/home/blin/grotto/data/hg19-srnas.RData')
@@ -309,6 +311,89 @@ annot_colors = list(stage = setNames(c(brewer.pal(4, "Set1"), "grey"), levels(he
                     survival = setNames(c(brewer.pal(9, "Reds"), "grey"), levels(heatmap_metadata$survival)),
                     sRNA = setNames(c("#fc9272", "#de2d26", "#08519c"), levels(annot_row$sRNA)))
 pheatmap(df, annotation_col = annot_col, annotation_row = annot_row, annotation_colors = annot_colors, fontsize = 8,  show_colnames = FALSE, show_rownames = FALSE, trace = "none", color = brewer.pal(9, "Reds")) 
+```
+
+## Multiple trials
+
+We want to use multiple trials for two purposes: a) measure the robustness, and b) perform feature selection. It's true that the features will be trained on all of the data, but we don't care about that - the validation occurs downstream with experiments and external data.
+
+```{r trial-function}
+runTrial = function(dataset, features) {
+  # feature selection: coxph -> hazard ratios
+  hazard_ratios = data.frame(t(sapply(features, function(feature) {
+    training_counts = t(dataset$training_counts)[, feature]
+    training_metadata = cbind(dataset$training_metadata, feature = training_counts)
+    cox = summary(coxph(Surv(days_survived, vital_status) ~ feature, data = training_metadata))
+    hazard = cox$conf.int[1]
+    lower = cox$conf.int[3]
+    upper = cox$conf.int[4]
+    pvalue = coef(cox)[5]
+    c(hazard = hazard, lower = lower, upper = upper, pvalue = pvalue)
+  })))
+
+  mirna_hazards = hazard_ratios[str_detect(rownames(hazard_ratios), "hsa-mir|hsa-let"), ]
+  mirna_hazards = mirna_hazards[order(mirna_hazards$pvalue), ][1:20, ]
+  tsrna_hazards = hazard_ratios[str_detect(rownames(hazard_ratios), "tRF|trailer"), ]
+  tsrna_hazards = tsrna_hazards[order(tsrna_hazards$pvalue), ][1:20, ]
+  srna_hazards = hazard_ratios[order(hazard_ratios$pvalue), ][1:20, ]
+
+  signaturePvals = lapply(list(mirna_hazards, tsrna_hazards, srna_hazards), function(hazards) {
+    # feature selection: build model with lasso
+    training_response = Surv(dataset$training_metadata$days_survived, dataset$training_metadata$vital_status)
+    training_counts = t(dataset$training_counts[rownames(dataset$training_counts) %in% rownames(hazards), ])
+    model = cv.glmnet(training_counts, training_response, alpha = 1, nlambda = 250, family = "cox")
+    # test model - split into high vs low risk, and find significance of risk score
+    testing_metadata = dataset$testing_metadata
+    testing_counts = t(dataset$testing_counts[rownames(dataset$training_counts) %in% rownames(hazards), colnames(dataset$testing_counts) %in% testing_metadata$barcode])
+    pred = predict(model, newx = testing_counts, s = model$lambda.min)
+    testing_metadata$risk = as.factor(ifelse(pred > median(pred), "High-risk", "Low-risk"))
+    cox = coxph(Surv(days_survived, vital_status) ~ risk, data = testing_metadata)
+    list(pval = coef(summary(cox))[5], signature = rownames(coef(model, s = model$lambda.min)))
+  })
+
+  list(mirna_pval = signaturePvals[[1]]$pval, mirna_signature = signaturePvals[[1]]$signature, tsrna_pval = signaturePvals[[2]]$pval, tsrna_signature = signaturePvals[[2]]$signature, srna_pval = signaturePvals[[3]]$pval, srna_signature = signaturePvals[[3]]$signature)
+}
+```
+
+```{r run-trials}
+ntrials = 1000
+trials = mclapply(1:ntrials, function(i) {
+  metadata = luad_metadata[luad_metadata$sample_type == "TP" & !is.na(luad_metadata$days_survived) & luad_metadata$days_survived > 0, ]
+  counts = luad_adjusted_counts[rownames(luad_adjusted_counts) %in% srnas[srnas$class %in% c("tRF-1", "tRF-3", "tRF-5", "miRNA")]$tx_name, colnames(luad_adjusted_counts) %in% metadata$barcode]
+  metadata$dummy = as.factor(1)
+  dataset = setupTrainingTestingSets(metadata, "dummy", counts)
+  runTrial(dataset, rownames(counts))
+}, mc.cores = 25)
+```
+
+We've already run the trials, so what we need to do now is extract p-values and check out the features that have been selected the most. To assess significance, the null hypothesis is that each feature has an equal chance of being selected. 
+
+This can be modeled as a binomial distribution _B_(_n_, _p_), where _n_ is the number of trials and _p_ is the probability of being selected. In this case, _p_ is `20/(# features)`, since in the Cox model we default to the 20 most significant hazard ratios. The mean, _np_, is quite intuitive: it's the probability of a feature being selected times the number of trials, so at random we can expect a feature to be selected _np_ times. We derive the variance from the distribution, _npq_. 
+
+The p-value is calculated by first calculating the z-score and then using `pnorm`.
+
+```{r aggregate-trials}
+# Some trials will fail and exit silently, need to catch these and remove them
+pvals = ldply(trials, function(trial) tryCatch(c(miRNA = trial$mirna_pval, tRF = trial$tsrna_pval, sRNA = trial$srna_pval), error = function(e) c(miRNA = NA, tRF = NA, sRNA = NA)))
+trials = trials[complete.cases(pvals)]
+pvals = pvals[complete.cases(pvals), ]
+ntrials = sum(complete.cases(pvals))
+srna_freq = rbind(data.frame(Class = 'miRNA', count(unlist(lapply(trials, function(trial) trial$mirna_signature)))),
+                  data.frame(Class = 'tRF', count(unlist(lapply(trials, function(trial) trial$tsrna_signature)))),
+                  data.frame(Class = 'sRNA', count(unlist(lapply(trials, function(trial) trial$srna_signature)))))
+srna_freq$pval = (srna_freq$freq - ntrials * 20/dim(counts)[1])/(ntrials * 20/dim(counts)[1] * (1 - 20/dim(counts)[1]))
+srna_freq$pval = pnorm(srna_freq$pval, lower.tail = FALSE)
+srna_freq$padj = qvalue(srna_freq$pval) # only works for really large ntrials values
+srna_freq$bonf = srna_freq$pval < 0.05/dim(srna_freq)[1] # Bonferroni correction
+srna_freq = srna_freq[order(srna_freq$freq, decreasing = TRUE), ]
+kable(srna_freq[srna_freq$Class == "tRF", ][1:20, ])
+kable(srna_freq[srna_freq$Class == "miRNA", ][1:20, ])
+```
+
+```{r robustness-plot, fig.width=8, fig.height=5}
+pvals = melt(pvals)
+colnames(pvals) = c("Class", "Pvalue")
+ggplot(pvals) + geom_boxplot(aes(x = Class, y = Pvalue))
 ```
 
 
