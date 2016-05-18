@@ -74,8 +74,8 @@ levels(heatmap_metadata$n_stage) = list(N0 = "N0", N1 = "N1", N2 = "N2", N3 = "N
 heatmap_metadata$smoker = as.factor(heatmap_metadata$smoker)
 levels(heatmap_metadata$smoker) = list(Smoker = 1, Nonsmoker = 0)
 # survival
-heatmap_metadata$days_survived[heatmap_metadata$days_survived == 0] = NA
-heatmap_metadata$survival = with(heatmap_metadata, cut2(days_survived, g = 9))
+heatmap_metadata$survival = as.factor(heatmap_metadata$days_survived > 1000)
+levels(heatmap_metadata$survival) = list(Long = TRUE, Short = FALSE)
 # heatmap annotation
 levels(heatmap_metadata$sample_type) = list(TP = "TP", NT = "NT")
 annot_col = data.frame(stage = heatmap_metadata$stage, subtype = heatmap_metadata$subtype, n_stage = heatmap_metadata$n_stage, sample_type = heatmap_metadata$sample_type, smoker = heatmap_metadata$smoker)
@@ -87,7 +87,7 @@ annot_colors = list(stage = setNames(c(brewer.pal(4, "Set1"), "grey"), levels(he
                     n_stage = setNames(c(brewer.pal(4, "Set3"), "grey"), levels(heatmap_metadata$n_stage)),
                     sample_type = setNames(c("#EF8A62", "#67A9CF"), levels(heatmap_metadata$sample_type)),
                     smoker = setNames(c("#8dd3c7", "#ffffb3", "grey"), levels(heatmap_metadata$smoker)),
-                    survival = setNames(c(brewer.pal(9, "Reds"), "grey"), levels(heatmap_metadata$survival)),
+                    survival = setNames(c("#1f78b4", "#984ea3", "grey"), levels(heatmap_metadata$survival)),
                     sRNA = setNames(c(brewer.pal(8, "Paired"), "grey"), levels(annot_row$sRNA)))
 ```
 

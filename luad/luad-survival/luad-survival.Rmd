@@ -295,10 +295,10 @@ levels(heatmap_metadata$stage) = list(I = c("Stage I", "Stage IA", "Stage IB"), 
 levels(heatmap_metadata$n_stage) = list(N0 = "N0", N1 = "N1", N2 = "N2", N3 = "N3", Unknown = c("NX", "[Not Available]"))
 # smoker
 heatmap_metadata$smoker = as.factor(heatmap_metadata$smoker)
-# survival: Hmisc::cut2, splits days survived into quantiles
-heatmap_metadata$days_survived[heatmap_metadata$days_survived == 0] = NA
-heatmap_metadata$survival = with(heatmap_metadata, cut2(days_survived, g = 9))
 levels(heatmap_metadata$smoker) = list(Smoker = 1, Nonsmoker = 0)
+# survival
+heatmap_metadata$survival = as.factor(heatmap_metadata$days_survived > 1000)
+levels(heatmap_metadata$survival) = list(Long = TRUE, Short = FALSE)
 # heatmap annotation
 annot_col = data.frame(stage = heatmap_metadata$stage, subtype = heatmap_metadata$subtype, n_stage = heatmap_metadata$n_stage, smoker = heatmap_metadata$smoker, survival = heatmap_metadata$survival)
 rownames(annot_col) = colnames(df)
@@ -308,8 +308,8 @@ annot_colors = list(stage = setNames(c(brewer.pal(4, "Set1"), "grey"), levels(he
                     subtype = setNames(c(brewer.pal(3, "Set2"), "grey"), levels(heatmap_metadata$subtype)),
                     n_stage = setNames(c(brewer.pal(4, "Set3"), "grey"), levels(heatmap_metadata$n_stage)),
                     smoker = setNames(c("#8dd3c7", "#ffffb3", "grey"), levels(heatmap_metadata$smoker)),
-                    survival = setNames(c(brewer.pal(9, "Reds"), "grey"), levels(heatmap_metadata$survival)),
-                    sRNA = setNames(c("#fc9272", "#de2d26", "#08519c"), levels(annot_row$sRNA)))
+                    survival = setNames(c("#1f78b4", "#984ea3", "grey"), levels(heatmap_metadata$survival)),
+                    sRNA = setNames(c("#08519c", "#fc9272", "#de2d26"), levels(annot_row$sRNA)))
 pheatmap(df, annotation_col = annot_col, annotation_row = annot_row, annotation_colors = annot_colors, fontsize = 8,  show_colnames = FALSE, show_rownames = FALSE, trace = "none", color = brewer.pal(9, "Reds")) 
 ```
 
