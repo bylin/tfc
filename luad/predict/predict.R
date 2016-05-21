@@ -55,7 +55,7 @@ plotGlms <- function(roc_df) ggplot(roc_df) + geom_line(aes(x = FPR, y = TPR, co
 
 plotAucs <- function(all_feature_glms) {
   aucs <- ldply(all_feature_glms, function(glms) unlist(lapply(1:length(glms), function(i) glms[[i]]$auc)))
-  rownames(aucs) <- c("tsRNA", "miRNA", "snoRNA", "piRNA")
+  rownames(aucs) <- c("tsRNA", "miRNA")
   df <- melt(t(aucs))[, -1]
   colnames(df) <- c("sRNA", "AUC")
   ggplot(df) + geom_boxplot(aes(x = sRNA, y = AUC)) + ggtitle("AUC distribution by sRNA type") + ylim(0, 1)
