@@ -355,11 +355,22 @@ runTrial = function(dataset, features) {
 }
 ```
 
+### Remove redundant sRNAs
+
+There's a lot of tRFs that are basically the same feature, just derived from different tRNAs. I've identified a few of them and reduced the number of tRF features from 1311 to 1046. This isn't all of the duplicates - for example, if we have two identical sequences except for one being 1 base pair longer, it won't match.
+
+
+```{r replace-unique}
+unique_trfs = read.table('~/grotto/data/hg19-unique-tRFs.bed', header = FALSE, stringsAsFactors = FALSE)
+unique_trfs = GRanges(unique_trfs$V1, IRanges(unique_trfs$V2, unique_trfs$V3), unique_trfs$V6, tx_name = unique_trfs$V4, class = as.factor(unique_trfs$V5))
+unique_srnas = c(srnas[srnas$class == "miRNA"], unique_trfs)
+```
+
 ```{r run-trials}
 ntrials = 1000
 trials = mclapply(1:ntrials, function(i) {
   metadata = luad_metadata[luad_metadata$sample_type == "TP" & !is.na(luad_metadata$days_survived) & luad_metadata$days_survived > 0, ]
-  counts = luad_adjusted_counts[rownames(luad_adjusted_counts) %in% srnas[srnas$class %in% c("tRF-1", "tRF-3", "tRF-5", "miRNA")]$tx_name, colnames(luad_adjusted_counts) %in% metadata$barcode]
+  counts = luad_adjusted_counts[rownames(luad_adjusted_counts) %in% unique_srnas$tx_name, colnames(luad_adjusted_counts) %in% metadata$barcode]
   metadata$dummy = as.factor(1)
   dataset = setupTrainingTestingSets(metadata, "dummy", counts)
   runTrial(dataset, rownames(counts))
