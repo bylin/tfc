@@ -20,14 +20,16 @@ load('/inside/grotto/blin/trna-markers/process-reads/luad-metadata.RData')
 luad_raw_counts = luad_raw_counts[srnas$class != "tRNA", ]
 ```
 
-## Scale counts
+## Helper functions
+
+### Scale counts
 
 As a side step,
 
 - Remove features that don't exist in at least 5% of the samples
 - Remove features that have a combined count total of less than 20 reads
 
-```{r scale-counts}
+```{r scale-counts-function}
 scaleCounts <- function(counts, metadata) {
   #counts <- counts[apply(counts, 1, function(row) length(which(row > 0)) > length(colnames(counts)) * 0.05), ]
   counts <- counts[apply(counts, 1, function(row) sum(as.numeric(row)) > 20), ]
@@ -37,14 +39,11 @@ scaleCounts <- function(counts, metadata) {
   dds <- estimateSizeFactors(dds)
   counts(dds, normalized = TRUE)
 }
-luad_scaled_counts <- scaleCounts(luad_raw_counts, luad_metadata)
-#luad_scaled_counts <- normalizeCounts(brca_raw_counts, brca_metadata)
-#prad_scaled_counts <- normalizeCounts(prad_raw_counts, prad_metadata)
 ```
 
 MA plots are log mean of counts (x axis) vs log fold change (y axis). But we don't need log mean of counts, mean of counts should do nicely. This is a good way to do some QA for scaling.
 
-```{r normalization-ma, fig.width=12, fig.height=4, fig.show='hold'}
+```{r plot-ma-function}
 plotMA <- function(raw_counts, scaled_counts, metadata, srnas) {
   tp_barcodes <- metadata[metadata$sample_type == "TP" & metadata$barcode %in% colnames(scaled_counts), ]$barcode
   nt_barcodes <- metadata[metadata$sample_type == "NT" & metadata$barcode %in% colnames(scaled_counts), ]$barcode
@@ -57,15 +56,12 @@ plotMA <- function(raw_counts, scaled_counts, metadata, srnas) {
               data.frame(log2FC = log2(tp_counts) - log2(nt_counts), log2counts = log2((tp_counts + nt_counts)/2), scaled = "Scaled", sRNA = srnas$class[match(names(tp_counts), srnas$tx_name)]))
   ggplot(df) + geom_point(aes(x = log2counts, y = log2FC, color = sRNA), size = 1, alpha = 0.3) + geom_hline(yintercept = 0, color = "red") + facet_wrap(~ scaled)
 }
-plotMA(luad_raw_counts, luad_scaled_counts, luad_metadata, srnas) + ggtitle("LUAD MA plot")
-#plotMA(brca_raw_counts, brca_scaled_counts, brca_metadata, srnas) + ggtitle("BRCA MA plot")
-#plotMA(prad_raw_counts, prad_scaled_counts, prad_metadata, srnas) + ggtitle("PRAD MA plot") 
+
 ```
 
+### Check batch effects
 
-## Check for batch effects
-
-```{r batch-effects}
+```{r batch-effects-function}
 removeBatchEffects <- function(metadata, counts) {
   metadata <- metadata[match(colnames(counts), metadata$barcode), ]
   mod <- model.matrix(~ sample_type, data = metadata)
@@ -74,12 +70,9 @@ removeBatchEffects <- function(metadata, counts) {
   batch <- as.factor(as.character(metadata$batch[!is.na(metadata$batch)]))
   exp(ComBat(dat = counts, batch = batch, mod = mod))
 }
-luad_adjusted_counts = removeBatchEffects(luad_metadata, luad_scaled_counts)
-#brca_adjusted_counts <- removeBatchEffects(brca_clinical, brca_scaled_counts)
-#prad_adjusted_counts <- removeBatchEffects(prad_clinical, prad_scaled_counts) 
 ```
 
-```{r pca-function}
+```{r batch-pca-function}
 plotPCA <- function(scaled_counts, adjusted_counts, metadata) {
   pca_before <- prcomp(t(scaled_counts), scale = TRUE)
   pca_after <- prcomp(t(adjusted_counts), scale = TRUE)
@@ -89,28 +82,61 @@ plotPCA <- function(scaled_counts, adjusted_counts, metadata) {
   ggplot(df) + geom_point(aes(x = PC1, y = PC2, color = batch, shape = batch, size = sample_type), alpha = 0.3) + scale_shape_manual(values = c(1:22, 34:60)[1:nlevels(df$batch)]) + scale_size_manual(values = c(2, 5)) + guides(color = guide_legend(ncol = 2), shape = guide_legend(ncol = 2), size = guide_legend(ncol = 2)) + facet_wrap(~ adjusted)
 }
 readDistribution = function(scaled_counts, adjusted_counts) {
-  df = data.frame(counts = as.vector(scaled_counts), type = "Scaled")
-  df = rbind(df, data.frame(counts = as.vector(adjusted_counts), type = "Adjusted"))
+  df = data.frame(counts = as.vector(scaled_counts) + 1, type = "Scaled")
+  df = rbind(df, data.frame(counts = as.vector(adjusted_counts) + 1, type = "Adjusted"))
   ggplot(df) + geom_histogram(aes(x = counts)) + facet_wrap(~ type) + scale_y_log10()
 }
 ```
 
-```{r luad-pca, fig.show="hold", fig.width=12, fig.height=5}
+## LUAD
+
+```{r luad-scale, fig.width=12, fig.height=4, fig.show='hold'}
+luad_scaled_counts = scaleCounts(luad_raw_counts, luad_metadata)
+plotMA(luad_raw_counts, luad_scaled_counts, luad_metadata, srnas) + ggtitle("LUAD MA plot")
+```
+
+```{r luad-batch, fig.show="hold", fig.width=12, fig.height=5}
+luad_adjusted_counts = removeBatchEffects(luad_metadata, luad_scaled_counts)
 plotPCA(luad_scaled_counts, luad_adjusted_counts, luad_metadata) + ggtitle("PCA for batch effect adjusted LUAD data")
 readDistribution(luad_scaled_counts, luad_adjusted_counts)
 ```
 
-```{r brca-pca, fig.show="hold", fig.width=12, fig.height=5}
-#plotPCA(brca_normalized_counts, brca_adjusted_counts, brca_clinical) + ggtitle("PCA for batch effect adjusted BRCA data")
-```
-
-```{r prad-pca, fig.show="hold", fig.width=12, fig.height=5}
-#plotPCA(prad_normalized_counts, prad_adjusted_counts, prad_clinical) + ggtitle("PCA for batch effect adjusted PRAD data")
-```
-
-
-```{r save-data}
+```{r luad-save}
 save(file = 'luad-counts.RData', luad_adjusted_counts)
+```
+
+## BRCA
+
+```{r brca-scale, fig.width=12, fig.height=4, fig.show='hold'}
+brca_scaled_counts = scaleCounts(brca_raw_counts, brca_metadata)
+plotMA(brca_raw_counts, brca_scaled_counts, brca_metadata, srnas) + ggtitle("LUAD MA plot")
+```
+
+```{r brca-batch, fig.show="hold", fig.width=12, fig.height=5}
+brca_adjusted_counts = removeBatchEffects(brca_metadata, brca_scaled_counts)
+plotPCA(brca_scaled_counts, brca_adjusted_counts, brca_metadata) + ggtitle("PCA for batch effect adjusted LUAD data")
+readDistribution(brca_scaled_counts, brca_adjusted_counts)
+```
+
+```{r brca-save}
+save(file = 'brca-counts.RData', brca_adjusted_counts)
+```
+
+## PRAD
+
+```{r prad-scale, fig.width=12, fig.height=4, fig.show='hold'}
+prad_scaled_counts = scaleCounts(prad_raw_counts, prad_metadata)
+plotMA(prad_raw_counts, prad_scaled_counts, prad_metadata, srnas) + ggtitle("LUAD MA plot")
+```
+
+```{r prad-batch, fig.show="hold", fig.width=12, fig.height=5}
+prad_adjusted_counts = removeBatchEffects(prad_metadata, prad_scaled_counts)
+plotPCA(prad_scaled_counts, prad_adjusted_counts, prad_metadata) + ggtitle("PCA for batch effect adjusted LUAD data")
+readDistribution(prad_scaled_counts, prad_adjusted_counts)
+```
+
+```{r prad-save}
+save(file = 'prad-counts.RData', prad_adjusted_counts)
 ```
 
 ```{r save-session, echo=FALSE, cache=FALSE}
