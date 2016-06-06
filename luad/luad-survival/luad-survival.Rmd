@@ -299,6 +299,8 @@ levels(heatmap_metadata$smoker) = list(Smoker = 1, Nonsmoker = 0)
 # survival
 heatmap_metadata$survival = as.factor(heatmap_metadata$days_survived > 1000)
 levels(heatmap_metadata$survival) = list(Long = TRUE, Short = FALSE)
+# sRNA risk score
+heatmap_metadata$score = as.factor(srna$score)
 # heatmap annotation
 annot_col = data.frame(stage = heatmap_metadata$stage, subtype = heatmap_metadata$subtype, n_stage = heatmap_metadata$n_stage, smoker = heatmap_metadata$smoker, survival = heatmap_metadata$survival)
 rownames(annot_col) = colnames(df)
@@ -398,7 +400,7 @@ srna_freq$padj = qvalue(srna_freq$pval) # only works for really large ntrials va
 srna_freq$bonf = srna_freq$pval < 0.05/dim(srna_freq)[1] # Bonferroni correction
 srna_freq = srna_freq[order(srna_freq$freq, decreasing = TRUE), ]
 kable(srna_freq[srna_freq$Class == "tRF", ][1:20, ])
-kable(srna_freq[srna_freq$Class == "miRNA", ][1:20, ])
+kable(srna_freq[srna_freq$Class == "miRNA", ][1:20, ]) 
 ```
 
 ```{r robustness-plot, fig.width=8, fig.height=5}

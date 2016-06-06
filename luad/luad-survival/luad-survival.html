@@ -954,7 +954,7 @@ img.mfp-img {
 <body>
 <h1>luad-survival</h1>
 
-<p><em>Last modified <code class="knitr inline">02:18 PM on May 21, 2016</code>. This document, R session image, knitr cache, figures, and other associated datasets are located in <code>cruncher:/inside/grotto/blin/trna-markers/luad/luad-survival/</code>.</em></p>
+<p><em>Last modified <code class="knitr inline">04:43 PM on May 21, 2016</code>. This document, R session image, knitr cache, figures, and other associated datasets are located in <code>cruncher:/inside/grotto/blin/trna-markers/luad/luad-survival/</code>.</em></p>
 
 <div class="chunk" id="libraries"><div class="rcode"><div class="source"><pre class="knitr r">library(survival)
 library(glmnet)
@@ -2379,16 +2379,8 @@ pheatmap(df, annotation_col = annot_col, annotation_row = annot_row, annotation_
 <p>There&#39;s a lot of tRFs that are basically the same feature, just derived from different tRNAs. I&#39;ve identified a few of them and reduced the number of tRF features from 1311 to 1046. This isn&#39;t all of the duplicates - for example, if we have two identical sequences except for one being 1 base pair longer, it won&#39;t match.</p>
 
 <div class="chunk" id="replace-unique"><div class="rcode"><div class="source"><pre class="knitr r">unique_trfs = read.table('~/grotto/data/hg19-unique-tRFs.bed', header = FALSE, stringsAsFactors = FALSE)
-unique_trfs = GRanges(mature$V1, IRanges(mature$V2, mature$V3), mature$V6, tx_name = mature$V4, class = as.factor(mature$V5))
-</pre></div>
-
-<div class="error"><pre class="knitr r">## Error in is(seqnames, &quot;Rle&quot;): object 'mature' not found
-</pre></div>
-
-<div class="source"><pre class="knitr r">unique_srnas = c(srnas[srnas$class == "miRNA"], unique_trfs)
-</pre></div>
-
-<div class="error"><pre class="knitr r">## Error in do.call(merge, lapply(x, seqinfo)): error in evaluating the argument 'args' in selecting a method for function 'do.call': Error in is(seqnames, &quot;Rle&quot;) : object 'mature' not found
+unique_trfs = GRanges(unique_trfs$V1, IRanges(unique_trfs$V2, unique_trfs$V3), unique_trfs$V6, tx_name = unique_trfs$V4, class = as.factor(unique_trfs$V5))
+unique_srnas = c(srnas[srnas$class == "miRNA"], unique_trfs)
 </pre></div>
 
 <p></div></div></p>
@@ -2444,188 +2436,188 @@ kable(srna_freq[srna_freq$Class == "tRF", ][1:20, ])
 </tr>
 </thead><tbody>
 <tr>
-<td align="left">384</td>
+<td align="left">454</td>
 <td align="left">tRF</td>
 <td align="left">tRNA-AlaTGC9-tRF-3</td>
-<td align="right">84</td>
+<td align="right">193</td>
 <td align="right">0</td>
 <td align="right">0</td>
 <td align="left">TRUE</td>
 </tr>
 <tr>
-<td align="left">379</td>
+<td align="left">449</td>
 <td align="left">tRF</td>
 <td align="left">tRNA-AlaTGC4-tRF-3</td>
-<td align="right">83</td>
+<td align="right">191</td>
 <td align="right">0</td>
 <td align="right">0</td>
 <td align="left">TRUE</td>
 </tr>
 <tr>
-<td align="left">376</td>
+<td align="left">447</td>
 <td align="left">tRF</td>
 <td align="left">tRNA-AlaTGC3-tRF-3</td>
-<td align="right">76</td>
+<td align="right">172</td>
 <td align="right">0</td>
 <td align="right">0</td>
 <td align="left">TRUE</td>
 </tr>
 <tr>
-<td align="left">368</td>
+<td align="left">441</td>
 <td align="left">tRF</td>
 <td align="left">tRNA-AlaAGC3-tRF-3</td>
-<td align="right">72</td>
+<td align="right">169</td>
 <td align="right">0</td>
 <td align="right">0</td>
 <td align="left">TRUE</td>
 </tr>
 <tr>
-<td align="left">527</td>
+<td align="left">576</td>
 <td align="left">tRF</td>
-<td align="left">tRNA-ThrTGT6-tRF-3</td>
-<td align="right">72</td>
+<td align="left">tRNA-PheGAA10-tRF-i</td>
+<td align="right">168</td>
 <td align="right">0</td>
 <td align="right">0</td>
 <td align="left">TRUE</td>
 </tr>
 <tr>
-<td align="left">364</td>
+<td align="left">434</td>
 <td align="left">tRF</td>
 <td align="left">tRNA-AlaAGC19-tRF-3</td>
+<td align="right">165</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="left">TRUE</td>
+</tr>
+<tr>
+<td align="left">612</td>
+<td align="left">tRF</td>
+<td align="left">tRNA-ThrTGT6-tRF-3</td>
+<td align="right">162</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="left">TRUE</td>
+</tr>
+<tr>
+<td align="left">438</td>
+<td align="left">tRF</td>
+<td align="left">tRNA-AlaAGC23-tRF-3</td>
+<td align="right">135</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="left">TRUE</td>
+</tr>
+<tr>
+<td align="left">431</td>
+<td align="left">tRF</td>
+<td align="left">tRNA-AlaAGC16-tRF-3</td>
+<td align="right">125</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="left">TRUE</td>
+</tr>
+<tr>
+<td align="left">597</td>
+<td align="left">tRF</td>
+<td align="left">tRNA-SerGCT3-tRF-3</td>
+<td align="right">123</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="left">TRUE</td>
+</tr>
+<tr>
+<td align="left">565</td>
+<td align="left">tRF</td>
+<td align="left">tRNA-LysTTT10-tRF-3</td>
+<td align="right">122</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="left">TRUE</td>
+</tr>
+<tr>
+<td align="left">604</td>
+<td align="left">tRF</td>
+<td align="left">tRNA-ThrAGT5-tRF-3</td>
+<td align="right">115</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="left">TRUE</td>
+</tr>
+<tr>
+<td align="left">498</td>
+<td align="left">tRF</td>
+<td align="left">tRNA-GlnCTG7-tRF-i</td>
+<td align="right">106</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="left">TRUE</td>
+</tr>
+<tr>
+<td align="left">566</td>
+<td align="left">tRF</td>
+<td align="left">tRNA-LysTTT11-tRF-3</td>
+<td align="right">106</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="left">TRUE</td>
+</tr>
+<tr>
+<td align="left">602</td>
+<td align="left">tRF</td>
+<td align="left">tRNA-SupTTA1-tRF-i</td>
+<td align="right">105</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="left">TRUE</td>
+</tr>
+<tr>
+<td align="left">482</td>
+<td align="left">tRF</td>
+<td align="left">tRNA-AspATC1-tRF-3</td>
+<td align="right">97</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="left">TRUE</td>
+</tr>
+<tr>
+<td align="left">622</td>
+<td align="left">tRF</td>
+<td align="left">tRNA-TyrGTA20-tRF-3</td>
+<td align="right">86</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="left">TRUE</td>
+</tr>
+<tr>
+<td align="left">549</td>
+<td align="left">tRF</td>
+<td align="left">tRNA-LysCTT13-tRF-3</td>
 <td align="right">70</td>
 <td align="right">0</td>
 <td align="right">0</td>
 <td align="left">TRUE</td>
 </tr>
 <tr>
-<td align="left">366</td>
+<td align="left">578</td>
 <td align="left">tRF</td>
-<td align="left">tRNA-AlaAGC23-tRF-3</td>
-<td align="right">60</td>
+<td align="left">tRNA-PheGAA1-tRF-i</td>
+<td align="right">68</td>
 <td align="right">0</td>
 <td align="right">0</td>
 <td align="left">TRUE</td>
 </tr>
 <tr>
-<td align="left">361</td>
+<td align="left">598</td>
 <td align="left">tRF</td>
-<td align="left">tRNA-AlaAGC16-tRF-3</td>
-<td align="right">54</td>
-<td align="right">0</td>
-<td align="right">0</td>
-<td align="left">TRUE</td>
-</tr>
-<tr>
-<td align="left">508</td>
-<td align="left">tRF</td>
-<td align="left">tRNA-SerGCT3-tRF-3</td>
-<td align="right">52</td>
-<td align="right">0</td>
-<td align="right">0</td>
-<td align="left">TRUE</td>
-</tr>
-<tr>
-<td align="left">481</td>
-<td align="left">tRF</td>
-<td align="left">tRNA-LysTTT1-tRF-3</td>
-<td align="right">49</td>
-<td align="right">0</td>
-<td align="right">0</td>
-<td align="left">TRUE</td>
-</tr>
-<tr>
-<td align="left">414</td>
-<td align="left">tRF</td>
-<td align="left">tRNA-AspATC1-tRF-3</td>
-<td align="right">46</td>
-<td align="right">0</td>
-<td align="right">0</td>
-<td align="left">TRUE</td>
-</tr>
-<tr>
-<td align="left">477</td>
-<td align="left">tRF</td>
-<td align="left">tRNA-LysTTT10-tRF-3</td>
-<td align="right">46</td>
-<td align="right">0</td>
-<td align="right">0</td>
-<td align="left">TRUE</td>
-</tr>
-<tr>
-<td align="left">517</td>
-<td align="left">tRF</td>
-<td align="left">tRNA-ThrAGT5-tRF-3</td>
-<td align="right">46</td>
-<td align="right">0</td>
-<td align="right">0</td>
-<td align="left">TRUE</td>
-</tr>
-<tr>
-<td align="left">479</td>
-<td align="left">tRF</td>
-<td align="left">tRNA-LysTTT11-tRF-3</td>
-<td align="right">41</td>
-<td align="right">0</td>
-<td align="right">0</td>
-<td align="left">TRUE</td>
-</tr>
-<tr>
-<td align="left">485</td>
-<td align="left">tRF</td>
-<td align="left">tRNA-LysTTT6-tRF-3</td>
-<td align="right">38</td>
-<td align="right">0</td>
-<td align="right">0</td>
-<td align="left">TRUE</td>
-</tr>
-<tr>
-<td align="left">480</td>
-<td align="left">tRF</td>
-<td align="left">tRNA-LysTTT13-tRF-3</td>
-<td align="right">37</td>
-<td align="right">0</td>
-<td align="right">0</td>
-<td align="left">TRUE</td>
-</tr>
-<tr>
-<td align="left">465</td>
-<td align="left">tRF</td>
-<td align="left">tRNA-Leu-AAG-1-3_trailer</td>
-<td align="right">32</td>
-<td align="right">0</td>
-<td align="right">0</td>
-<td align="left">TRUE</td>
-</tr>
-<tr>
-<td align="left">450</td>
-<td align="left">tRF</td>
-<td align="left">tRNA-His-GTG-1-3_trailer</td>
-<td align="right">30</td>
-<td align="right">0</td>
-<td align="right">0</td>
-<td align="left">TRUE</td>
-</tr>
-<tr>
-<td align="left">451</td>
-<td align="left">tRF</td>
-<td align="left">tRNA-His-GTG-1-4_trailer</td>
-<td align="right">30</td>
-<td align="right">0</td>
-<td align="right">0</td>
-<td align="left">TRUE</td>
-</tr>
-<tr>
-<td align="left">468</td>
-<td align="left">tRF</td>
-<td align="left">tRNA-LeuTAA2-tRF-5</td>
-<td align="right">30</td>
+<td align="left">tRNA-SerGCT4-tRF-3</td>
+<td align="right">65</td>
 <td align="right">0</td>
 <td align="right">0</td>
 <td align="left">TRUE</td>
 </tr>
 </tbody></table>
 
-<div class="source"><pre class="knitr r">kable(srna_freq[srna_freq$Class == "miRNA", ][1:20, ])
+<div class="source"><pre class="knitr r">kable(srna_freq[srna_freq$Class == "miRNA", ][1:20, ]) 
 </pre></div>
 
 <table><thead>
@@ -2640,181 +2632,181 @@ kable(srna_freq[srna_freq$Class == "tRF", ][1:20, ])
 </tr>
 </thead><tbody>
 <tr>
-<td align="left">34</td>
+<td align="left">38</td>
 <td align="left">miRNA</td>
 <td align="left">hsa-mir-1293</td>
-<td align="right">75</td>
+<td align="right">175</td>
 <td align="right">0</td>
 <td align="right">0</td>
 <td align="left">TRUE</td>
 </tr>
 <tr>
-<td align="left">245</td>
+<td align="left">297</td>
 <td align="left">miRNA</td>
 <td align="left">hsa-mir-548h-3</td>
+<td align="right">120</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="left">TRUE</td>
+</tr>
+<tr>
+<td align="left">299</td>
+<td align="left">miRNA</td>
+<td align="left">hsa-mir-548h-5</td>
+<td align="right">86</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="left">TRUE</td>
+</tr>
+<tr>
+<td align="left">53</td>
+<td align="left">miRNA</td>
+<td align="left">hsa-mir-1910</td>
+<td align="right">85</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="left">TRUE</td>
+</tr>
+<tr>
+<td align="left">26</td>
+<td align="left">miRNA</td>
+<td align="left">hsa-mir-1269b</td>
+<td align="right">83</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="left">TRUE</td>
+</tr>
+<tr>
+<td align="left">295</td>
+<td align="left">miRNA</td>
+<td align="left">hsa-mir-548h-1</td>
+<td align="right">83</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="left">TRUE</td>
+</tr>
+<tr>
+<td align="left">293</td>
+<td align="left">miRNA</td>
+<td align="left">hsa-mir-548f-1</td>
+<td align="right">82</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="left">TRUE</td>
+</tr>
+<tr>
+<td align="left">176</td>
+<td align="left">miRNA</td>
+<td align="left">hsa-mir-4643</td>
+<td align="right">80</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="left">TRUE</td>
+</tr>
+<tr>
+<td align="left">318</td>
+<td align="left">miRNA</td>
+<td align="left">hsa-mir-582</td>
+<td align="right">73</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="left">TRUE</td>
+</tr>
+<tr>
+<td align="left">13</td>
+<td align="left">miRNA</td>
+<td align="left">hsa-mir-1245a</td>
+<td align="right">67</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="left">TRUE</td>
+</tr>
+<tr>
+<td align="left">244</td>
+<td align="left">miRNA</td>
+<td align="left">hsa-mir-5092</td>
+<td align="right">66</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="left">TRUE</td>
+</tr>
+<tr>
+<td align="left">298</td>
+<td align="left">miRNA</td>
+<td align="left">hsa-mir-548h-4</td>
+<td align="right">59</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="left">TRUE</td>
+</tr>
+<tr>
+<td align="left">394</td>
+<td align="left">miRNA</td>
+<td align="left">hsa-mir-7641-2</td>
 <td align="right">55</td>
 <td align="right">0</td>
 <td align="right">0</td>
 <td align="left">TRUE</td>
 </tr>
 <tr>
-<td align="left">12</td>
-<td align="left">miRNA</td>
-<td align="left">hsa-mir-1245a</td>
-<td align="right">41</td>
-<td align="right">0</td>
-<td align="right">0</td>
-<td align="left">TRUE</td>
-</tr>
-<tr>
-<td align="left">247</td>
-<td align="left">miRNA</td>
-<td align="left">hsa-mir-548h-5</td>
-<td align="right">38</td>
-<td align="right">0</td>
-<td align="right">0</td>
-<td align="left">TRUE</td>
-</tr>
-<tr>
-<td align="left">263</td>
-<td align="left">miRNA</td>
-<td align="left">hsa-mir-582</td>
-<td align="right">38</td>
-<td align="right">0</td>
-<td align="right">0</td>
-<td align="left">TRUE</td>
-</tr>
-<tr>
-<td align="left">243</td>
-<td align="left">miRNA</td>
-<td align="left">hsa-mir-548h-1</td>
-<td align="right">36</td>
-<td align="right">0</td>
-<td align="right">0</td>
-<td align="left">TRUE</td>
-</tr>
-<tr>
-<td align="left">23</td>
-<td align="left">miRNA</td>
-<td align="left">hsa-mir-1269b</td>
-<td align="right">35</td>
-<td align="right">0</td>
-<td align="right">0</td>
-<td align="left">TRUE</td>
-</tr>
-<tr>
-<td align="left">200</td>
-<td align="left">miRNA</td>
-<td align="left">hsa-mir-5092</td>
-<td align="right">34</td>
-<td align="right">0</td>
-<td align="right">0</td>
-<td align="left">TRUE</td>
-</tr>
-<tr>
-<td align="left">50</td>
-<td align="left">miRNA</td>
-<td align="left">hsa-mir-1910</td>
-<td align="right">32</td>
-<td align="right">0</td>
-<td align="right">0</td>
-<td align="left">TRUE</td>
-</tr>
-<tr>
-<td align="left">278</td>
-<td align="left">miRNA</td>
-<td align="left">hsa-mir-662</td>
-<td align="right">31</td>
-<td align="right">0</td>
-<td align="right">0</td>
-<td align="left">TRUE</td>
-</tr>
-<tr>
-<td align="left">152</td>
-<td align="left">miRNA</td>
-<td align="left">hsa-mir-4643</td>
-<td align="right">30</td>
-<td align="right">0</td>
-<td align="right">0</td>
-<td align="left">TRUE</td>
-</tr>
-<tr>
-<td align="left">242</td>
-<td align="left">miRNA</td>
-<td align="left">hsa-mir-548f-1</td>
-<td align="right">25</td>
-<td align="right">0</td>
-<td align="right">0</td>
-<td align="left">TRUE</td>
-</tr>
-<tr>
-<td align="left">130</td>
-<td align="left">miRNA</td>
-<td align="left">hsa-mir-4435-2</td>
-<td align="right">24</td>
-<td align="right">0</td>
-<td align="right">0</td>
-<td align="left">TRUE</td>
-</tr>
-<tr>
-<td align="left">246</td>
-<td align="left">miRNA</td>
-<td align="left">hsa-mir-548h-4</td>
-<td align="right">24</td>
-<td align="right">0</td>
-<td align="right">0</td>
-<td align="left">TRUE</td>
-</tr>
-<tr>
-<td align="left">129</td>
+<td align="left">148</td>
 <td align="left">miRNA</td>
 <td align="left">hsa-mir-4435-1</td>
-<td align="right">23</td>
+<td align="right">54</td>
 <td align="right">0</td>
 <td align="right">0</td>
 <td align="left">TRUE</td>
 </tr>
 <tr>
-<td align="left">131</td>
+<td align="left">150</td>
 <td align="left">miRNA</td>
 <td align="left">hsa-mir-4440</td>
-<td align="right">22</td>
+<td align="right">54</td>
 <td align="right">0</td>
 <td align="right">0</td>
 <td align="left">TRUE</td>
 </tr>
 <tr>
-<td align="left">126</td>
+<td align="left">113</td>
 <td align="left">miRNA</td>
-<td align="left">hsa-mir-4421</td>
-<td align="right">21</td>
+<td align="left">hsa-mir-3656</td>
+<td align="right">53</td>
 <td align="right">0</td>
 <td align="right">0</td>
 <td align="left">TRUE</td>
 </tr>
 <tr>
-<td align="left">15</td>
+<td align="left">149</td>
 <td align="left">miRNA</td>
-<td align="left">hsa-mir-1256</td>
-<td align="right">20</td>
+<td align="left">hsa-mir-4435-2</td>
+<td align="right">53</td>
 <td align="right">0</td>
 <td align="right">0</td>
 <td align="left">TRUE</td>
 </tr>
 <tr>
-<td align="left">75</td>
+<td align="left">323</td>
 <td align="left">miRNA</td>
-<td align="left">hsa-mir-31</td>
-<td align="right">20</td>
+<td align="left">hsa-mir-6087</td>
+<td align="right">52</td>
 <td align="right">0</td>
 <td align="right">0</td>
 <td align="left">TRUE</td>
 </tr>
 <tr>
-<td align="left">147</td>
+<td align="left">411</td>
 <td align="left">miRNA</td>
-<td align="left">hsa-mir-4517</td>
-<td align="right">19</td>
+<td align="left">hsa-mir-873</td>
+<td align="right">46</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="left">TRUE</td>
+</tr>
+<tr>
+<td align="left">413</td>
+<td align="left">miRNA</td>
+<td align="left">hsa-mir-876</td>
+<td align="right">43</td>
 <td align="right">0</td>
 <td align="right">0</td>
 <td align="left">TRUE</td>
