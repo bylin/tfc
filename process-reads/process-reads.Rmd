@@ -19,8 +19,9 @@ This script downloads and remaps reads.
 
 - v1: Prostate adenocarcinoma (PRAD)
 - v2: Lung adenocarcinoma (LUAD) and breast invasive carcinoma (BRCA)
-- v3: Hepatocellular carcinoma (LIHC), Lymphoid neoplasm diffuse large b-cell lymphoma (DLBC), colorectal (COAD and READ), pancreatic (PAAD), testicular germ cell (TGCT), lower grade glioma (LGG)
+- v3: Hepatocellular carcinoma (LIHC), lower grade glioma (LGG), Lymphoid neoplasm diffuse large b-cell lymphoma (DLBC), colorectal (COAD and READ), pancreatic (PAAD), testicular germ cell (TGCT)
   - acute myeloid leukemia (AML and LAML), glioblastoma (GBM), osteosarcoma (OS) do not have enough samples for miRNA-Seq data.
+- v4: Rest of PanCan 12 sample types
 
 
 ## Parse file and clinical metadata
@@ -92,22 +93,22 @@ lgg_metadata = parseMetadata('/inside/grotto/blin/trna-markers/process-reads/lgg
 ```{r get-clinical-data}
 luad_clinical = processClinicalDataFile('luad-clinical-biotab-04032015.tab', 'luad-clinical-batches-04032015.tab')
 luad_clinical = with(luad_clinical[match(luad_metadata$participant_id, luad_clinical$bcr_patient_uuid), ], 
-                      data.frame(luad_metadata,
-                                 gender = gender, 
-                                 race = race,
-                                 smoker = ifelse(tobacco_smoking_history_indicator == "Lifelong Non-smoker", 0, 1), # NA doesn't return true or false, just NA. this is useful.
-                                 t_stage = ajcc_tumor_pathologic_pt, 
-                                 m_stage = ajcc_metastasis_pathologic_pm, 
-                                 n_stage = ajcc_nodes_pathologic_pn,
-                                 stage = ajcc_pathologic_tumor_stage,
-                                 days_survived = as.integer(days_survived), 
-                                 vital_status = ifelse(vital_status == "Alive", 0, 1),
-                                 age = age_at_initial_pathologic_diagnosis,
-                                 batch = batch))
+                    data.frame(luad_metadata,
+                               gender = gender, 
+                               race = race,
+                               smoker = ifelse(tobacco_smoking_history_indicator == "Lifelong Non-smoker", 0, 1), # NA doesn't return true or false, just NA. this is useful.
+                               t_stage = ajcc_tumor_pathologic_pt, 
+                               m_stage = ajcc_metastasis_pathologic_pm, 
+                               n_stage = ajcc_nodes_pathologic_pn,
+                               stage = ajcc_pathologic_tumor_stage,
+                               days_survived = as.integer(days_survived), 
+                               vital_status = ifelse(vital_status == "Alive", 0, 1),
+                               age = age_at_initial_pathologic_diagnosis,
+                               batch = batch))
 luad_metadata = luad_clinical
-brca_clinical <- processClinicalDataFile('brca-clinical-biotab-04032015.tab', 'brca-clinical-batches-04032015.tab')
-brca_clinical <- with(brca_clinical[match(brca_metadata$participant_id, brca_clinical$bcr_patient_uuid), ], 
-                      data.frame(brca_metadata,
+brca_clinical = processClinicalDataFile('brca-clinical-biotab-04032015.tab', 'brca-clinical-batches-04032015.tab')
+brca_clinical = with(brca_clinical[match(brca_metadata$participant_id, brca_clinical$bcr_patient_uuid), ], 
+                     data.frame(brca_metadata,
                                 ethnicity = ethnicity,
                                 race = race,
                                 vital_status = ifelse(vital_status == "Alive", 0, 1),
@@ -122,18 +123,44 @@ brca_clinical <- with(brca_clinical[match(brca_metadata$participant_id, brca_cli
                                 her2_status = her2_status_by_ihc,
                                 batch = batch))
 brca_metadata = brca_clinical
-prad_clinical <- processClinicalDataFile('prad-clinical-biotab-04012015.tab', 'prad-clinical-batches-04012015.tab')
-prad_clinical <- with(prad_clinical[match(prad_metadata$participant_id, prad_clinical$bcr_patient_uuid), ],
-                      data.frame(prad_metadata,
-                                 days_survived = as.integer(days_survived),
-                                 vital_status = ifelse(vital_status == "Alive", 0, 1),
-                                 t_stage = pathologic_T,
-                                 m_stage = pathologic_M,
-                                 n_stage = pathologic_N,
-                                 gleason_score = as.integer(gleason_score),
-                                 age = abs(round(as.integer(birth_days_to)/365)),
-                                 batch = batch)) # maybe change to age_at _initial_pathologic_diagnosis? 
+prad_clinical = processClinicalDataFile('prad-clinical-biotab-04012015.tab', 'prad-clinical-batches-04012015.tab')
+prad_clinical = with(prad_clinical[match(prad_metadata$participant_id, prad_clinical$bcr_patient_uuid), ],
+                     data.frame(prad_metadata,
+                                days_survived = as.integer(days_survived),
+                                vital_status = ifelse(vital_status == "Alive", 0, 1),
+                                t_stage = pathologic_T,
+                                m_stage = pathologic_M,
+                                n_stage = pathologic_N,
+                                gleason_score = as.integer(gleason_score),
+                                age = abs(round(as.integer(birth_days_to)/365)),
+                                batch = batch)) # maybe change to age_at _initial_pathologic_diagnosis? 
 prad_metadata = prad_clinical
+lihc_clinical = processClinicalDataFile('lihc-clinical-biotab-06062016.tab', 'lihc-clinical-batches-06062016.tab') 
+lihc_clinical = with(lihc_clinical[match(lihc_metadata$participant_id, lihc_clinical$bcr_patient_uuid), ],
+                     data.frame(lihc_metadata,
+                                days_survived = as.integer(days_survived),
+                                vital_status = ifelse(vital_status == "Alive", 0, 1),
+                                t_stage = pathologic_T,
+                                m_stage = pathologic_M,
+                                n_stage = pathologic_N,
+                                hepatitis_b = str_detect(history_hepato_carcinoma_risk_factors, "Hepatitis B"),
+                                hepatitis_c = str_detect(history_hepato_carcinoma_risk_factors, "Hepatitis C"),
+                                alcoholic = str_detect(history_hepato_carcinoma_risk_factors, "Alcohol consumption"),
+                                nonalcoholic_predisposition = str_detect(history_hepato_carcinoma_risk_factors, "Non-Alcoholic"),
+                                history_hepato_carcinoma_risk_factors = history_hepato_carcinoma_risk_factors,
+                                batch = batch))
+lihc_metadata = lihc_clinical
+lgg_clinical = processClinicalDataFile('lgg-clinical-biotab-06062016.tab', 'lgg-clinical-batches-06062016.tab')
+lgg_clinical = with(lgg_clinical[match(lgg_metadata$participant_id, lgg_clinical$bcr_patient_uuid), ],
+                    data.frame(lgg_metadata,
+                               days_survived = as.integer(days_survived),
+                               vital_status = ifelse(vital_status == "Alive", 0, 1),
+                               tumor_grade = tumor_grade,
+                               history_headaches = history_headaches,
+                               history_seizures = history_seizures,
+                               idh1 = replace(idh1_mutation_found, idh1_mutation_found == "[Not Applicable]", idh1_mutation_test_indicator[which(idh1_mutation_found == "[Not Applicable]")]),
+                               batch = batch))
+lgg_metadata = lgg_clinical
 ```
 
 
@@ -166,7 +193,7 @@ Andrew has a few settings that I've incorporated too, with his reasoning:
   - --very-sensitive: necessary due to mismatch caused by modified base misreads 
   - --np 5 --ignore-quals: quality scores are irrelevant, and N should be scored as only slightly better than a mismatch. ignoring quals forces the mismatches to have a single score, which is necessary for precise N weighting.
 
-```{r remap, engine='bash'}
+```{r remap, engine='bash', results='hide'}
 remap() {
   currentwd=`pwd`
   cd $1
@@ -193,11 +220,11 @@ remap /inside/grotto/blin/trna-markers/datasets/luad/mirna
 remap /inside/grotto/blin/trna-markers/datasets/brca/mirna
 remap /inside/grotto/blin/trna-markers/datasets/prad/mirna
 #remap /inside/grotto/blin/trna-markers/datasets/dlbc/mirna
-#remap /inside/grotto/blin/trna-markers/datasets/lihc/mirna
+remap /inside/grotto/blin/trna-markers/datasets/lihc/mirna
 #remap /inside/grotto/blin/trna-markers/datasets/coad/mirna
 #remap /inside/grotto/blin/trna-markers/datasets/paad/mirna
 #remap /inside/grotto/blin/trna-markers/datasets/tgct/mirna
-#remap /inside/grotto/blin/trna-markers/datasets/lgg/mirna
+remap /inside/grotto/blin/trna-markers/datasets/lgg/mirna
 ```
 
 ## Count reads
@@ -235,7 +262,7 @@ countFeaturesFromBam = function(metadata, features, dir = ".") {
                           data.frame(counts = countOverlaps(trf5s, sample, minoverlap = 10, type = 'start')))
     colnames(sample_counts) = row$barcode
     sample_counts
-  }, mc.cores = 30)
+  }, mc.cores = 20)
   names = unlist(lapply(counts, colnames))
   counts = as.data.frame(matrix(unlist(counts), ncol = nrow(metadata)))
   rownames(counts) = c(features$tx_name, trf1s_plus$tx_name, trf1s_minus$tx_name, trf3s$tx_name, trf5s$tx_name)
@@ -262,7 +289,17 @@ save(file = 'prad-raw-counts.RData', prad_raw_counts)
 save(file = 'prad-metadata.RData', prad_metadata)
 ```
 
+```{r count-features-lihc}
+lihc_raw_counts <- countFeaturesFromBam(lihc_metadata, srnas, '/inside/grotto/blin/trna-markers/datasets/lihc/mirna/')
+save(file = 'lihc-raw-counts.RData', lihc_raw_counts)
+save(file = 'lihc-metadata.RData', lihc_metadata)
+```
 
+```{r count-features-lgg}
+lgg_raw_counts <- countFeaturesFromBam(lgg_metadata, srnas, '/inside/grotto/blin/trna-markers/datasets/lgg/mirna/')
+save(file = 'lgg-raw-counts.RData', lgg_raw_counts)
+save(file = 'lgg-metadata.RData', lgg_metadata)
+```
 
 ```{r save-session, cache=FALSE}
 save.session("process-reads.RSession")
