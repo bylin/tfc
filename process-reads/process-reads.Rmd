@@ -140,9 +140,9 @@ lihc_clinical = with(lihc_clinical[match(lihc_metadata$participant_id, lihc_clin
                      data.frame(lihc_metadata,
                                 days_survived = as.integer(days_survived),
                                 vital_status = ifelse(vital_status == "Alive", 0, 1),
-                                t_stage = pathologic_T,
-                                m_stage = pathologic_M,
-                                n_stage = pathologic_N,
+                                t_stage = ajcc_tumor_pathologic_pt, 
+                                m_stage = ajcc_metastasis_pathologic_pm, 
+                                n_stage = ajcc_nodes_pathologic_pn,
                                 hepatitis_b = str_detect(history_hepato_carcinoma_risk_factors, "Hepatitis B"),
                                 hepatitis_c = str_detect(history_hepato_carcinoma_risk_factors, "Hepatitis C"),
                                 alcoholic = str_detect(history_hepato_carcinoma_risk_factors, "Alcohol consumption"),
@@ -151,14 +151,15 @@ lihc_clinical = with(lihc_clinical[match(lihc_metadata$participant_id, lihc_clin
                                 batch = batch))
 lihc_metadata = lihc_clinical
 lgg_clinical = processClinicalDataFile('lgg-clinical-biotab-06062016.tab', 'lgg-clinical-batches-06062016.tab')
-lgg_clinical = with(lgg_clinical[match(lgg_metadata$participant_id, lgg_clinical$bcr_patient_uuid), ],
-                    data.frame(lgg_metadata,
+lgg_clinical = lgg_clinical[match(lgg_metadata$participant_id, lgg_clinical$bcr_patient_uuid), ]
+lgg_clinical = with(lgg_clinical[complete.cases(lgg_clinical), ],
+                    data.frame(lgg_metadata[complete.cases(lgg_clinical), ],
                                days_survived = as.integer(days_survived),
                                vital_status = ifelse(vital_status == "Alive", 0, 1),
                                tumor_grade = tumor_grade,
                                history_headaches = history_headaches,
                                history_seizures = history_seizures,
-                               idh1 = replace(idh1_mutation_found, idh1_mutation_found == "[Not Applicable]", idh1_mutation_test_indicator[which(idh1_mutation_found == "[Not Applicable]")]),
+                               idh1 = replace(idh1_mutation_found, idh1_mutation_found == "[Not Available]", idh1_mutation_test_indicator[which(idh1_mutation_found == "[Not Available]")]),
                                batch = batch))
 lgg_metadata = lgg_clinical
 ```
